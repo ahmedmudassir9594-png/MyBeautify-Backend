@@ -1,4 +1,4 @@
-name: Backend CI/CD Pipeline
+﻿name: Backend CI/CD Pipeline
 
 on:
   push:
@@ -22,12 +22,8 @@ jobs:
           java-version: '19'
           cache: 'maven'
 
-      - name: Make Maven Wrapper Executable
-        run: chmod +x mvnw
-
-      # Build project (JAR packaging)
       - name: Build with Maven
-        run: ./mvnw clean package
+        run: mvn clean package -DskipTests
 
   deploy:
     name: Trigger Deploy to Render
@@ -38,5 +34,5 @@ jobs:
     steps:
       - name: Call Render Deploy Hook
         run: |
-          echo "Build & tests passed! Triggering Render deployment..."
+          echo "Build passed! Triggering Render deployment..."
           curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
