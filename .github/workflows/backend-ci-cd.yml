@@ -23,6 +23,7 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven
+        working-directory: artifacts/api-server/spring-app
         run: mvn clean package -DskipTests
 
   deploy:
