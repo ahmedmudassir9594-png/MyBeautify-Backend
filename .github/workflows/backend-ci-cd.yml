@@ -34,6 +34,12 @@ jobs:
 
     steps:
       - name: Call Render Deploy Hook
+        env:
+          HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
+          if [ -z "$HOOK_URL" ]; then
+            echo "ERROR: RENDER_DEPLOY_HOOK_URL secret is empty!"
+            exit 1
+          fi
           echo "Build passed! Triggering Render deployment..."
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          curl -X POST "$HOOK_URL"
