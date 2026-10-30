@@ -21,9 +21,9 @@ primary_region = 'iad'
   processes = ['app']
 
 [[http_service.checks]]
-  interval = '15s'
-  timeout = '5s'
-  grace_period = '45s'
+  interval = '20s'
+  timeout = '10s'
+  grace_period = '150s'
   method = 'get'
   path = '/api/swagger-ui.html'
 
