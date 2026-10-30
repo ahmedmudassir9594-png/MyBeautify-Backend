@@ -40,9 +40,11 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:none}
+    database-platform: org.hibernate.dialect.MySQLDialect  
     open-in-view: true
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: false
         temp:
           use_jdbc_metadata_defaults: false
