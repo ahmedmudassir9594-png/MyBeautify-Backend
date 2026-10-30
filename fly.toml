@@ -5,11 +5,11 @@ primary_region = 'iad'
 [build]
 
 [env]
+  PORT = "8080"
   SERVER_PORT = "8080"
   SERVER_ADDRESS = "0.0.0.0"
-  SPRING_JPA_HIBERNATE_DDL_AUTO = "update"
-  SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT = "org.hibernate.dialect.MySQLDialect"
-  SPRING_JPA_PROPERTIES_HIBERNATE_HBM2DDL_AUTO = "update"
+  DDL_AUTO = "none"
+  SPRING_JPA_HIBERNATE_DDL_AUTO = "none"
   SPRING_JPA_PROPERTIES_HIBERNATE_TEMP_USE_JDBC_METADATA_DEFAULTS = "false"
 
 [http_service]
@@ -19,6 +19,13 @@ primary_region = 'iad'
   auto_start_machines = true
   min_machines_running = 1
   processes = ['app']
+
+[[http_service.checks]]
+  interval = '15s'
+  timeout = '5s'
+  grace_period = '45s'
+  method = 'get'
+  path = '/api/swagger-ui.html'
 
 [[vm]]
   memory = '1gb'
