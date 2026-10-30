@@ -5,10 +5,12 @@ primary_region = 'iad'
 [build]
 
 [env]
-  SPRING_JPA_DATABASE_PLATFORM = "org.hibernate.dialect.MySQLDialect"
-  SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT = "org.hibernate.dialect.MySQLDialect"
   SERVER_PORT = "8080"
   SERVER_ADDRESS = "0.0.0.0"
+  SPRING_JPA_HIBERNATE_DDL_AUTO = "update"
+  SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT = "org.hibernate.dialect.MySQLDialect"
+  SPRING_JPA_PROPERTIES_HIBERNATE_HBM2DDL_AUTO = "update"
+  SPRING_JPA_PROPERTIES_HIBERNATE_TEMP_USE_JDBC_METADATA_DEFAULTS = "false"
 
 [http_service]
   internal_port = 8080
