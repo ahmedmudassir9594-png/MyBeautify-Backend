@@ -39,11 +39,13 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: ${DDL_AUTO:update}
+      ddl-auto: ${DDL_AUTO:none}
     open-in-view: true
     properties:
       hibernate:
         format_sql: false
+        temp:
+          use_jdbc_metadata_defaults: false
         jdbc:
           time_zone: UTC
 
