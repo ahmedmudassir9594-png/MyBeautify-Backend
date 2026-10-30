@@ -18,4 +18,4 @@ COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "app.jar"]
+CMD ["java", "-Xmx350m", "-Xms200m", "-XX:+UseSerialGC", "-Dspring.jpa.hibernate.ddl-auto=none", "-Dhibernate.temp.use_jdbc_metadata_defaults=false", "-jar", "app.jar"]
