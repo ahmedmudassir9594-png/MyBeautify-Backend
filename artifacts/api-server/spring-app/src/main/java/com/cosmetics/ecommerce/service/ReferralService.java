@@ -38,7 +38,7 @@ public class ReferralService {
             @Value("${app.referral.discount-percent:10}") BigDecimal discountPercent,
             @Value("${app.referral.min-order:5000.00}") BigDecimal minimumOrderAmount,
             @Value("${app.referral.discount-description:10% off your first jewellery purchase}") String discountDescription,
-            @Value("${app.referral.base-url:http://localhost:5173}") String defaultBaseUrl) {
+            @Value("${app.referral.base-url:https://malkaz.vercel.app}") String defaultBaseUrl) {
         this.referralRepository = referralRepository;
         this.userRepository = userRepository;
         this.discountPercent = discountPercent;

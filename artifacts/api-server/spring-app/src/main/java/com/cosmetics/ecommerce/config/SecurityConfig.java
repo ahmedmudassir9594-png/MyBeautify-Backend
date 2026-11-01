@@ -30,7 +30,7 @@ public class SecurityConfig {
     private final ObjectProvider<AuditLogService> auditLogServiceProvider;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          @Value("${app.cors.allowed-origins:${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}}") String allowedOrigins,
+                          @Value("${app.cors.allowed-origins:${CORS_ALLOWED_ORIGINS:https://malkaz.vercel.app,http://localhost:5173,http://localhost:3000}}") String allowedOrigins,
                           ObjectProvider<AuditLogService> auditLogServiceProvider) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.allowedOrigins = allowedOrigins;
