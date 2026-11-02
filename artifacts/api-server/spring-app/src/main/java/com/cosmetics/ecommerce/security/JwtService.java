@@ -17,9 +17,10 @@ public class JwtService {
     private final long accessTokenMinutes;
     private final long refreshTokenDays;
 
-    public JwtService(@Value("${app.jwt.secret}") String secret,
-                      @Value("${app.jwt.access-token-minutes}") long accessTokenMinutes,
-                      @Value("${app.jwt.refresh-token-days}") long refreshTokenDays) {
+    public JwtService(
+            @Value("${jwt.secret:${app.jwt.secret:a4bf05ff532862e43naem226f19619674f8d89a7d5442e426a6e2e170e731a66}}") String secret,
+            @Value("${jwt.access-token-minutes:${app.jwt.access-token-minutes:30}}") long accessTokenMinutes,
+            @Value("${jwt.refresh-token-days:${app.jwt.refresh-token-days:14}}") long refreshTokenDays) {
         if (secret == null || secret.length() < 32) {
             throw new IllegalStateException("JWT_SECRET or SESSION_SECRET must contain at least 32 characters.");
         }
@@ -28,20 +29,15 @@ public class JwtService {
         this.refreshTokenDays = refreshTokenDays;
     }
 
-    public String accessToken(User user) {
-        return build(user, accessTokenMinutes * 60, "ACCESS");
-    }
+    public String accessToken(User user) {return build(user, accessTokenMinutes * 60, "ACCESS");}
 
-    public String refreshToken(User user) {
-        return build(user, refreshTokenDays * 24 * 60 * 60, "REFRESH");
-    }
-
+    public String refreshToken(User user) {return build(user, refreshTokenDays * 24 * 60 * 60, "REFRESH");}
     private String build(User user, long seconds, String tokenType) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(user.getUsername())
                 .claim("role", user.getRole().name())
-                .claim("token_type", tokenType)
+                .claim("token_type",tokenType)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(seconds)))
                 .signWith(key)

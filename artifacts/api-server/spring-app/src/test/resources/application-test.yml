@@ -13,3 +13,6 @@ app:
   jwt:
     secret: test-secret-that-is-long-enough-for-hmac-signing-123456
   seed-data: false
+  storage:
+    upload-dir: target/test-uploads
+    max-file-size-bytes: 5242880

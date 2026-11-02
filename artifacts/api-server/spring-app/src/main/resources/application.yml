@@ -10,6 +10,10 @@ app:
       shipping-flat-rate: ${CHECKOUT_SHIPPING:8.99}
     mail:
       enabled: ${MAIL_ENABLED:true}
+  storage:
+    upload-dir: ${UPLOAD_DIR:uploads}
+    max-file-size-bytes: ${MAX_FILE_SIZE:5242880}
+    base-url: ${STORAGE_BASE_URL:}
 
 server:
   port: ${PORT:8080}
@@ -40,7 +44,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:none}
-    database-platform: org.hibernate.dialect.MySQLDialect  
+    database-platform: org.hibernate.dialect.MySQLDialect
     open-in-view: true
     properties:
       hibernate:
@@ -50,6 +54,7 @@ spring:
           use_jdbc_metadata_defaults: false
         jdbc:
           time_zone: UTC
+
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}

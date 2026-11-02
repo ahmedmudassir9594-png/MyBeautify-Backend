@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & Test
+    name: Build & Verify
     runs-on: ubuntu-latest
 
     steps:
@@ -23,23 +23,37 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven
+        run: mvn clean compile -DskipTests
         working-directory: artifacts/api-server/spring-app
-        run: mvn clean package -DskipTests
 
   deploy:
-    name: Deploy to Fly.io
+    name: Deploy to E2E Networks VPS
     needs: build-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            echo "Navigating to project directory..."
+            cd /var/www/malkaz/MyBeautify-Backend
 
-      - name: Set up Flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
+            echo "Pulling latest code from GitHub..."
+            git reset --hard
+            git pull origin main
 
-      - name: Deploy application to Fly.io
-        run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+            echo "Packaging Spring Boot application..."
+            cd artifacts/api-server/spring-app
+            mvn clean package -DskipTests
+
+            echo "Restarting Malkaz backend service..."
+            systemctl restart malkaz.service
+
+            sleep 4
+            systemctl is-active --quiet malkaz.service && echo "Deployment Successful: Service is Active!" || (echo "Service failed to restart!" && exit 1)

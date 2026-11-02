@@ -31,6 +31,11 @@ public class GlobalExceptionHandler {
         return error(e.getMessage() != null ? e.getMessage() : "Invalid request data.", HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    ResponseEntity<ErrorResponse> maxUploadSize(org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        return error("Uploaded file exceeds the maximum allowed size limit of 5MB.", HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     ResponseEntity<ErrorResponse> messageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException e) {
         return error("Malformed request body or invalid JSON format.", HttpStatus.BAD_REQUEST);

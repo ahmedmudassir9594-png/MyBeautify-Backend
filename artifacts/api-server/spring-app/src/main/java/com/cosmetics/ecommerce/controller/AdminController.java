@@ -2,22 +2,58 @@ package com.cosmetics.ecommerce.controller;
 
 import com.cosmetics.ecommerce.dto.*;
 import com.cosmetics.ecommerce.enums.OrderStatus;
+import com.cosmetics.ecommerce.exception.BadRequestException;
 import com.cosmetics.ecommerce.service.*;
 import com.cosmetics.ecommerce.dto.ProfileDtos.AdminUserUpdateRequest;
 import com.cosmetics.ecommerce.dto.UserResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.*;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/admin")
 @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
 public class AdminController {
-    private final DashboardService dashboard; private final OrderService orders; private final ProductService products; private final UserAdminService users;
-    public AdminController(DashboardService dashboard, OrderService orders, ProductService products, UserAdminService users) { this.dashboard = dashboard; this.orders = orders; this.products = products; this.users = users; }
+    private final DashboardService dashboard;
+    private final OrderService orders;
+    private final ProductService products;
+    private final UserAdminService users;
+    private final FileStorageService fileStorageService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminController(DashboardService dashboard, OrderService orders, ProductService products,
+                           UserAdminService users, FileStorageService fileStorageService) {
+        this.dashboard = dashboard;
+        this.orders = orders;
+        this.products = products;
+        this.users = users;
+        this.fileStorageService = fileStorageService;
+    }
+
+    public AdminController(DashboardService dashboard, OrderService orders, ProductService products, UserAdminService users) {
+        this(dashboard, orders, products, users, null);
+    }
+
+    @PostMapping(value = "/uploads/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<ImageUploadResponse> uploadImage(
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "image", required = false) MultipartFile image) {
+        MultipartFile uploadFile = file != null ? file : image;
+        if (uploadFile == null || uploadFile.isEmpty()) {
+            throw new BadRequestException("Uploaded file cannot be empty.");
+        }
+        if (fileStorageService == null) {
+            throw new IllegalStateException("File storage service is not available.");
+        }
+        StoredFile stored = fileStorageService.storeFile(uploadFile);
+        return ApiResponse.ok("Image uploaded successfully.", ImageUploadResponse.from(stored));
+    }
+
     @GetMapping("/dashboard") @PreAuthorize("hasRole('ADMIN')") public ApiResponse<DashboardResponse> dashboard() { return ApiResponse.ok("Dashboard fetched successfully.", dashboard.get()); }
     @PatchMapping("/orders/{id}/status") public ApiResponse<com.cosmetics.ecommerce.dto.OrderDtos.OrderResponse> status(@PathVariable Long id, @RequestParam OrderStatus status) { return ApiResponse.ok("Order status updated.", orders.updateStatus(id, status)); }
     @GetMapping("/orders") public ApiResponse<PageResponse<com.cosmetics.ecommerce.dto.OrderDtos.OrderResponse>> allOrders(@PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) { return ApiResponse.ok("Orders fetched successfully.", orders.all(pageable)); }

@@ -10,4 +10,5 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     List<Category> findByActiveTrueOrderByNameAsc();
     Page<Category> findByActiveTrueOrderByNameAsc(Pageable pageable);
     boolean existsByNameIgnoreCase(String name);
+    long countByImageUrl(String imageUrl);
 }

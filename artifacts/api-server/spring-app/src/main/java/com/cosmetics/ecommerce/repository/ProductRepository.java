@@ -34,4 +34,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     @Query("select coalesce(avg(r.rating), 0) from Review r where r.product.id = :productId and r.approved = true")
     Double averageRating(@Param("productId") Long productId);
+
+    long countByImageUrl(String imageUrl);
 }

@@ -10,6 +10,7 @@ import com.cosmetics.ecommerce.repository.*;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.text.Normalizer;
 import java.util.Locale;
@@ -21,18 +22,26 @@ public class ProductService {
     private final CategoryRepository categories;
     private final BrandRepository brands;
     private final AuditLogService auditLogService;
+    private final FileStorageService fileStorageService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ProductService(ProductRepository products, CategoryRepository categories,
-                          BrandRepository brands, AuditLogService auditLogService) {
+                          BrandRepository brands, AuditLogService auditLogService,
+                          FileStorageService fileStorageService) {
         this.products = products;
         this.categories = categories;
         this.brands = brands;
         this.auditLogService = auditLogService;
+        this.fileStorageService = fileStorageService;
+    }
+
+    public ProductService(ProductRepository products, CategoryRepository categories,
+                          BrandRepository brands, AuditLogService auditLogService) {
+        this(products, categories, brands, auditLogService, null);
     }
 
     public ProductService(ProductRepository products, CategoryRepository categories, BrandRepository brands) {
-        this(products, categories, brands, null);
+        this(products, categories, brands, null, null);
     }
 
     public PageResponse<ProductResponse> list(String query, Long categoryId, Long brandId, Boolean featured,
@@ -76,6 +85,7 @@ public class ProductService {
         products.findBySku(request.sku()).filter(existing -> !existing.getId().equals(id))
                 .ifPresent(existing -> { throw new DuplicateResourceException("SKU is already in use."); });
 
+        String oldImageUrl = p.getImageUrl();
         String prevState = String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%s,\"discountPrice\":%s,\"stock\":%d,\"active\":%s}",
                 p.getName(), p.getSku(), p.getPrice(), p.getDiscountPrice(), p.getStockQuantity(), p.isActive());
 
@@ -87,14 +97,43 @@ public class ProductService {
         p.setCategory(categories.findById(request.categoryId()).orElseThrow(() -> new ResourceNotFoundException("Category not found.")));
         copy(request, p);
 
-        if (auditLogService != null) {
-            String newState = String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%s,\"discountPrice\":%s,\"stock\":%d,\"active\":%s}",
-                    p.getName(), p.getSku(), p.getPrice(), p.getDiscountPrice(), p.getStockQuantity(), p.isActive());
-            auditLogService.logEvent(AuditAction.PRODUCT_UPDATE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(p.getId()),
-                    "Product updated: " + p.getName(), prevState, newState);
+        Product saved = products.save(p);
+
+        if (oldImageUrl != null && !oldImageUrl.equals(saved.getImageUrl())) {
+            cleanupImageIfOrphaned(oldImageUrl);
         }
 
-        return response(p);
+        if (auditLogService != null) {
+            String newState = String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%s,\"discountPrice\":%s,\"stock\":%d,\"active\":%s}",
+                    saved.getName(), saved.getSku(), saved.getPrice(), saved.getDiscountPrice(), saved.getStockQuantity(), saved.isActive());
+            auditLogService.logEvent(AuditAction.PRODUCT_UPDATE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(saved.getId()),
+                    "Product updated: " + saved.getName(), prevState, newState);
+        }
+
+        return response(saved);
+    }
+
+    @Transactional
+    public ProductResponse updateProductImage(Long id, MultipartFile file) {
+        if (fileStorageService == null) {
+            throw new IllegalStateException("File storage service is not available.");
+        }
+        Product p = products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+        String oldImageUrl = p.getImageUrl();
+        StoredFile stored = fileStorageService.storeFile(file);
+        p.setImageUrl(stored.fullUrl());
+        Product saved = products.save(p);
+
+        if (oldImageUrl != null && !oldImageUrl.equals(saved.getImageUrl())) {
+            cleanupImageIfOrphaned(oldImageUrl);
+        }
+
+        if (auditLogService != null) {
+            auditLogService.logEvent(AuditAction.PRODUCT_UPDATE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(saved.getId()),
+                    "Product image updated: " + saved.getName(), oldImageUrl, saved.getImageUrl());
+        }
+
+        return response(saved);
     }
 
     @Transactional
@@ -124,6 +163,20 @@ public class ProductService {
         }
 
         return response(p);
+    }
+
+    private void cleanupImageIfOrphaned(String imageUrl) {
+        if (fileStorageService == null || imageUrl == null || imageUrl.isBlank()) {
+            return;
+        }
+        if (!fileStorageService.isLocalUpload(imageUrl)) {
+            return;
+        }
+        long productCount = products.countByImageUrl(imageUrl);
+        long categoryCount = categories.countByImageUrl(imageUrl);
+        if (productCount == 0 && categoryCount == 0) {
+            fileStorageService.deleteFileIfExists(imageUrl);
+        }
     }
 
     private void copy(ProductRequest r, Product p) {
