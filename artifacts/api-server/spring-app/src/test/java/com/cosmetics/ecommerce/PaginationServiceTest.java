@@ -1,16 +1,13 @@
 package com.cosmetics.ecommerce;
 
-import com.cosmetics.ecommerce.dto.CatalogDtos.BrandResponse;
 import com.cosmetics.ecommerce.dto.CatalogDtos.CategoryResponse;
 import com.cosmetics.ecommerce.dto.PageResponse;
 import com.cosmetics.ecommerce.dto.UserResponse;
-import com.cosmetics.ecommerce.entity.Brand;
 import com.cosmetics.ecommerce.entity.Category;
 import com.cosmetics.ecommerce.entity.Coupon;
 import com.cosmetics.ecommerce.entity.User;
 import com.cosmetics.ecommerce.enums.DiscountType;
 import com.cosmetics.ecommerce.enums.Role;
-import com.cosmetics.ecommerce.repository.BrandRepository;
 import com.cosmetics.ecommerce.repository.CategoryRepository;
 import com.cosmetics.ecommerce.repository.CouponRepository;
 import com.cosmetics.ecommerce.repository.UserRepository;
@@ -70,25 +67,19 @@ class PaginationServiceTest {
     @Test
     void catalogServiceReturnsPagedCategoryAndBrandResponses() {
         CategoryRepository categories = Mockito.mock(CategoryRepository.class);
-        BrandRepository brands = Mockito.mock(BrandRepository.class);
-        CatalogService service = new CatalogService(categories, brands);
+        CatalogService service = new CatalogService(categories);
 
         Category category = new Category("Cleansers", "Face cleansers for daily makeup and impurity removal.");
         category.setActive(true);
-        Brand brand = new Brand("Brand A", "Makeup brand");
-        brand.setActive(true);
+
 
         Mockito.when(categories.findByActiveTrueOrderByNameAsc(Mockito.any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(category), PageRequest.of(0, 20), 1));
-        Mockito.when(brands.findByActiveTrueOrderByNameAsc(Mockito.any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(brand), PageRequest.of(0, 20), 1));
 
         PageResponse<CategoryResponse> categoriesResponse = service.categories(PageRequest.of(0, 20));
-        PageResponse<BrandResponse> brandsResponse = service.brands(PageRequest.of(0, 20));
 
         assertEquals(1, categoriesResponse.totalElements());
         assertEquals("Cleansers", categoriesResponse.content().get(0).name());
-        assertEquals(1, brandsResponse.totalElements());
-        assertEquals("Brand A", brandsResponse.content().get(0).name());
+
     }
 }

@@ -40,7 +40,6 @@ class AuditLoggingServiceIntegrationTest {
     @Autowired private AuditLogRepository auditLogRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private CategoryRepository categoryRepository;
-    @Autowired private BrandRepository brandRepository;
     @Autowired private ProductRepository productRepository;
     @Autowired private AddressRepository addressRepository;
     @Autowired private OrderRepository orderRepository;
@@ -49,7 +48,6 @@ class AuditLoggingServiceIntegrationTest {
     @Autowired private PaymentRepository paymentRepository;
 
     private Category testCategory;
-    private Brand testBrand;
 
     @org.junit.jupiter.api.AfterEach
     void tearDown() { try { paymentRepository.deleteAll(); } catch (Exception ignored) {} try { orderRepository.deleteAll(); } catch (Exception ignored) {} try { cartRepository.deleteAll(); } catch (Exception ignored) {} try { addressRepository.deleteAll(); } catch (Exception ignored) {} try { resetTokenRepository.deleteAll(); } catch (Exception ignored) {} try { auditLogRepository.deleteAll(); } catch (Exception ignored) {} try { userRepository.deleteAll(); } catch (Exception ignored) {} }
@@ -58,8 +56,7 @@ class AuditLoggingServiceIntegrationTest {
         tearDown();
         testCategory = categoryRepository.findAll().stream().findFirst().orElseGet(() ->
                 categoryRepository.save(new Category("AuditSkincare", "Testing audit logs category")));
-        testBrand = brandRepository.findAll().stream().findFirst().orElseGet(() ->
-                brandRepository.save(new Brand("AuditBrand", "Testing audit logs brand")));
+
     }
 
     @Test
@@ -135,7 +132,7 @@ class AuditLoggingServiceIntegrationTest {
         // 1. Create product
         ProductRequest createReq = new ProductRequest(
                 "Audit Lip Glow " + sku, sku, new BigDecimal("29.99"), null,
-                50, 5, testBrand.getId(), testCategory.getId(),
+                50, 5, testCategory.getId(),
                 "Lip gloss for testing", null, null, true, false,
                 null, null, null, null, null, null, null
         );
@@ -160,7 +157,7 @@ class AuditLoggingServiceIntegrationTest {
         // 3. Update price and details
         ProductRequest updateReq = new ProductRequest(
                 "Audit Lip Glow Deluxe " + sku, sku, new BigDecimal("34.99"), new BigDecimal("31.99"),
-                75, 5, testBrand.getId(), testCategory.getId(),
+                75, 5, testCategory.getId(),
                 "Updated description", null, null, true, false,
                 null, null, null, null, null, null, null
         );
@@ -258,7 +255,7 @@ class AuditLoggingServiceIntegrationTest {
 
         String sku = "SKU-ORD-" + UUID.randomUUID().toString().substring(0, 6);
         Product product = productRepository.save(new Product(
-                "Order Item " + sku, "order-item-" + sku.toLowerCase(), sku, new BigDecimal("20.00"), 10, testBrand, testCategory
+                "Order Item " + sku, "order-item-" + sku.toLowerCase(), sku, new BigDecimal("20.00"), 10, testCategory
         ));
 
         // Add to cart

@@ -11,25 +11,22 @@ public final class CatalogDtos {
         public static CategoryResponse from(Category c) { return new CategoryResponse(c.getId(), c.getName(), c.getDescription(), c.getImageUrl(), c.isActive()); }
     }
     public record CategoryRequest(@NotBlank @Size(max = 120) String name, @Size(max = 1000) String description, String imageUrl, Boolean active) {}
-    public record BrandResponse(Long id, String name, String description, String logoUrl, boolean active) {
-        public static BrandResponse from(Brand b) { return new BrandResponse(b.getId(), b.getName(), b.getDescription(), b.getLogoUrl(), b.isActive()); }
-    }
-    public record BrandRequest(@NotBlank @Size(max = 120) String name, @Size(max = 1000) String description, String logoUrl, Boolean active) {}
+
     public record ProductRequest(@NotBlank @Size(max = 180) String name, @NotBlank @Size(max = 80) String sku,
                                  @NotNull @Positive BigDecimal price, @PositiveOrZero BigDecimal discountPrice,
                                  @PositiveOrZero int stockQuantity, @PositiveOrZero int lowStockThreshold,
-                                 @NotNull Long brandId, @NotNull Long categoryId, String description, String shortDescription,
+                                 @NotNull Long categoryId, String description, String shortDescription,
                                  String imageUrl, Boolean active, Boolean featured, String ingredients, String benefits,
                                  String howToUse, String skinType, String shade, String size, Instant expiryDate) {}
     public record ProductResponse(Long id, String name, String slug, String sku, String description, String shortDescription,
                                   BigDecimal price, BigDecimal discountPrice, BigDecimal sellingPrice, int stockQuantity,
-                                  int lowStockThreshold, Long brandId, String brandName, Long categoryId, String categoryName,
+                                  int lowStockThreshold, Long categoryId, String categoryName,
                                   String imageUrl, boolean active, boolean featured, String ingredients, String benefits,
                                   String howToUse, String skinType, String shade, String size, Instant expiryDate, double averageRating) {
         public static ProductResponse from(Product p, double rating) {
             return new ProductResponse(p.getId(), p.getName(), p.getSlug(), p.getSku(), p.getDescription(), p.getShortDescription(),
                     p.getPrice(), p.getDiscountPrice(), p.sellingPrice(), p.getStockQuantity(), p.getLowStockThreshold(),
-                    p.getBrand().getId(), p.getBrand().getName(), p.getCategory().getId(), p.getCategory().getName(),
+                    p.getCategory().getId(), p.getCategory().getName(),
                     p.getImageUrl(), p.isActive(), p.isFeatured(), p.getIngredients(), p.getBenefits(), p.getHowToUse(),
                     p.getSkinType(), p.getShade(), p.getSize(), p.getExpiryDate(), rating);
         }

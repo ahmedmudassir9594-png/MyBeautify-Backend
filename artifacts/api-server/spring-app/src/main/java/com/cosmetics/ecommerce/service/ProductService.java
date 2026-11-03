@@ -20,36 +20,29 @@ import java.util.Locale;
 public class ProductService {
     private final ProductRepository products;
     private final CategoryRepository categories;
-    private final BrandRepository brands;
     private final AuditLogService auditLogService;
     private final FileStorageService fileStorageService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ProductService(ProductRepository products, CategoryRepository categories,
-                          BrandRepository brands, AuditLogService auditLogService,
+                          AuditLogService auditLogService,
                           FileStorageService fileStorageService) {
         this.products = products;
         this.categories = categories;
-        this.brands = brands;
         this.auditLogService = auditLogService;
         this.fileStorageService = fileStorageService;
     }
 
     public ProductService(ProductRepository products, CategoryRepository categories,
-                          BrandRepository brands, AuditLogService auditLogService) {
-        this(products, categories, brands, auditLogService, null);
+                          AuditLogService auditLogService) {
+        this(products, categories, auditLogService, null);
     }
 
-    public ProductService(ProductRepository products, CategoryRepository categories, BrandRepository brands) {
-        this(products, categories, brands, null, null);
-    }
-
-    public PageResponse<ProductResponse> list(String query, Long categoryId, Long brandId, Boolean featured,
+    public PageResponse<ProductResponse> list(String query, Long categoryId, Boolean featured,
                                                java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
         Page<Product> page;
         if (query != null && !query.isBlank()) page = products.search(query.trim(), pageable);
         else if (categoryId != null) page = products.findByCategoryIdAndActiveTrue(categoryId, pageable);
-        else if (brandId != null) page = products.findByBrandIdAndActiveTrue(brandId, pageable);
         else if (Boolean.TRUE.equals(featured)) page = products.findByFeaturedTrueAndActiveTrue(pageable);
         else if (minPrice != null && maxPrice != null) page = products.findByPriceBetween(minPrice, maxPrice, pageable);
         else page = products.findByActiveTrue(pageable);
@@ -62,16 +55,15 @@ public class ProductService {
     @Transactional
     public ProductResponse create(ProductRequest request) {
         if (products.findBySku(request.sku()).isPresent()) throw new DuplicateResourceException("SKU is already in use.");
-        Brand brand = brands.findById(request.brandId()).orElseThrow(() -> new ResourceNotFoundException("Brand not found."));
         Category category = categories.findById(request.categoryId()).orElseThrow(() -> new ResourceNotFoundException("Category not found."));
         Product p = new Product(request.name().trim(), uniqueSlug(request.name()), request.sku().trim(), request.price(),
-                request.stockQuantity(), brand, category);
+                request.stockQuantity(), category);
         copy(request, p);
         Product saved = products.save(p);
 
         if (auditLogService != null) {
-            String state = String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%s,\"stock\":%d,\"categoryId\":%d,\"brandId\":%d,\"active\":%s}",
-                    saved.getName(), saved.getSku(), saved.getPrice(), saved.getStockQuantity(), category.getId(), brand.getId(), saved.isActive());
+            String state = String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%s,\"stock\":%d,\"categoryId\":%d,\"active\":%s}",
+                    saved.getName(), saved.getSku(), saved.getPrice(), saved.getStockQuantity(), category.getId(), saved.isActive());
             auditLogService.logEvent(AuditAction.PRODUCT_CREATE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(saved.getId()),
                     "Product created: " + saved.getName(), null, state);
         }
@@ -93,7 +85,6 @@ public class ProductService {
         p.setSku(request.sku().trim());
         p.setPrice(request.price());
         p.setStockQuantity(request.stockQuantity());
-        p.setBrand(brands.findById(request.brandId()).orElseThrow(() -> new ResourceNotFoundException("Brand not found.")));
         p.setCategory(categories.findById(request.categoryId()).orElseThrow(() -> new ResourceNotFoundException("Category not found.")));
         copy(request, p);
 

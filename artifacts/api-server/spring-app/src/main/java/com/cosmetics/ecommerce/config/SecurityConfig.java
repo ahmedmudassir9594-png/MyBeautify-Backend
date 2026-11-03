@@ -58,7 +58,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/referrals/validate"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/categoriesASC/**", "/brands/**", "/uploads/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/categoriesASC/**", "/uploads/**").permitAll()
                         .requestMatchers("/admin/audit-logs/**").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasAnyRole("ADMIN", "STAFF")
                         .anyRequest().authenticated())

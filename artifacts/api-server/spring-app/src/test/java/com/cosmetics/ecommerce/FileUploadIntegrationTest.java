@@ -1,9 +1,7 @@
 package com.cosmetics.ecommerce;
 
 import com.cosmetics.ecommerce.dto.CatalogDtos.ProductRequest;
-import com.cosmetics.ecommerce.entity.Brand;
 import com.cosmetics.ecommerce.entity.Category;
-import com.cosmetics.ecommerce.repository.BrandRepository;
 import com.cosmetics.ecommerce.repository.CategoryRepository;
 import com.cosmetics.ecommerce.repository.ProductRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,9 +36,6 @@ class FileUploadIntegrationTest {
     private CategoryRepository categoryRepository;
 
     @Autowired
-    private BrandRepository brandRepository;
-
-    @Autowired
     private ProductRepository productRepository;
 
     @Autowired
@@ -51,7 +46,6 @@ class FileUploadIntegrationTest {
     };
 
     private Category testCategory;
-    private Brand testBrand;
 
     @BeforeEach
     void setUp() {
@@ -61,11 +55,6 @@ class FileUploadIntegrationTest {
             testCategory = categoryRepository.findAll().get(0);
         }
 
-        if (brandRepository.findAll().isEmpty()) {
-            testBrand = brandRepository.save(new Brand("MALKAZ Atelier", "Heritage jewellery"));
-        } else {
-            testBrand = brandRepository.findAll().get(0);
-        }
     }
 
     @Test
@@ -161,7 +150,7 @@ class FileUploadIntegrationTest {
         String uniqueSku = "SKU-JSON-" + System.currentTimeMillis();
         ProductRequest request = new ProductRequest(
                 "Royal Kundan Choker", uniqueSku, BigDecimal.valueOf(450.00), null,
-                15, 3, testBrand.getId(), testCategory.getId(),
+                15, 3, testCategory.getId(),
                 "Handcrafted choker necklace", "Royal Kundan",
                 "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f",
                 true, true, null, null, null, null, null, "Standard", null
@@ -181,7 +170,7 @@ class FileUploadIntegrationTest {
         // Also test admin path /admin/products/{id} with JSON update
         ProductRequest updateReq = new ProductRequest(
                 "Royal Kundan Choker Updated", uniqueSku, BigDecimal.valueOf(480.00), null,
-                12, 3, testBrand.getId(), testCategory.getId(),
+                12, 3, testCategory.getId(),
                 "Updated description", "Royal Kundan",
                 "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f",
                 true, true, null, null, null, null, null, "Standard", null
@@ -209,7 +198,6 @@ class FileUploadIntegrationTest {
                         .param("price", "299.99")
                         .param("stockQuantity", "10")
                         .param("lowStockThreshold", "2")
-                        .param("brandId", String.valueOf(testBrand.getId()))
                         .param("categoryId", String.valueOf(testCategory.getId()))
                         .param("description", "Vibrant Colombian emerald set in 18k yellow gold")
                         .param("active", "true"))
@@ -227,7 +215,7 @@ class FileUploadIntegrationTest {
         String uniqueSku = "SKU-IMG-" + System.currentTimeMillis();
         ProductRequest request = new ProductRequest(
                 "Solitaire Diamond Pendant", uniqueSku, BigDecimal.valueOf(799.00), null,
-                5, 2, testBrand.getId(), testCategory.getId(),
+                5, 2, testCategory.getId(),
                 "Brilliant cut diamond pendant", "Diamond pendant",
                 null, true, false, null, null, null, null, null, null, null
         );

@@ -52,7 +52,6 @@ class OrderServiceLifecycleTest {
     private User user2;
     private Product product;
     private Category category;
-    private Brand brand;
 
     @BeforeEach
     void setUp() {
@@ -63,8 +62,7 @@ class OrderServiceLifecycleTest {
         ReflectionTestUtils.setField(user2, "id", 20L);
 
         category = new Category("Skincare", "Care");
-        brand = new Brand("Luma", "Beauty");
-        product = new Product("Lipstick", "lipstick", "SKU-LIP", new BigDecimal("25.00"), 10, brand, category);
+        product = new Product("Lipstick", "lipstick", "SKU-LIP", new BigDecimal("25.00"), 10, category);
         ReflectionTestUtils.setField(product, "id", 100L);
     }
 

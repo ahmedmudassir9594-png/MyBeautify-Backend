@@ -17,19 +17,17 @@ import java.util.List;
 @Service
 public class CatalogService {
     private final CategoryRepository categories;
-    private final BrandRepository brands;
     private final FileStorageService fileStorageService;
     private final ProductRepository productRepository;
 
-    public CatalogService(CategoryRepository categories, BrandRepository brands) {
-        this(categories, brands, null, null);
+    public CatalogService(CategoryRepository categories) {
+        this(categories,null,null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
-    public CatalogService(CategoryRepository categories, BrandRepository brands,
+    public CatalogService(CategoryRepository categories,
                           FileStorageService fileStorageService, ProductRepository productRepository) {
         this.categories = categories;
-        this.brands = brands;
         this.fileStorageService = fileStorageService;
         this.productRepository = productRepository;
     }
@@ -46,13 +44,8 @@ public class CatalogService {
         return CategoryResponse.from(categories.findById(id).orElseThrow(() -> new ResourceNotFoundException("Category not found.")));
     }
 
-    public PageResponse<BrandResponse> brands(Pageable pageable) {
-        return PageResponse.from(brands.findByActiveTrueOrderByNameAsc(pageable).map(BrandResponse::from));
-    }
 
-    public BrandResponse brand(Long id) {
-        return BrandResponse.from(brands.findById(id).orElseThrow(() -> new ResourceNotFoundException("Brand not found.")));
-    }
+
 
     @Transactional
     public CategoryResponse createCategory(CategoryRequest r) {
@@ -104,37 +97,6 @@ public class CatalogService {
     public void deleteCategory(Long id) {
         Category c = categories.findById(id).orElseThrow(() -> new ResourceNotFoundException("Category not found."));
         c.setActive(false);
-    }
-
-    @Transactional
-    public BrandResponse createBrand(BrandRequest r) {
-        if (brands.existsByNameIgnoreCase(r.name())) {
-            throw new DuplicateResourceException("Brand name is already in use.");
-        }
-        Brand b = new Brand(r.name().trim(), r.description());
-        b.setLogoUrl(r.logoUrl());
-        if (r.active() != null) {
-            b.setActive(r.active());
-        }
-        return BrandResponse.from(brands.save(b));
-    }
-
-    @Transactional
-    public BrandResponse updateBrand(Long id, BrandRequest r) {
-        Brand b = brands.findById(id).orElseThrow(() -> new ResourceNotFoundException("Brand not found."));
-        b.setName(r.name().trim());
-        b.setDescription(r.description());
-        b.setLogoUrl(r.logoUrl());
-        if (r.active() != null) {
-            b.setActive(r.active());
-        }
-        return BrandResponse.from(b);
-    }
-
-    @Transactional
-    public void deleteBrand(Long id) {
-        Brand b = brands.findById(id).orElseThrow(() -> new ResourceNotFoundException("Brand not found."));
-        b.setActive(false);
     }
 
     private void cleanupImageIfOrphaned(String imageUrl) {

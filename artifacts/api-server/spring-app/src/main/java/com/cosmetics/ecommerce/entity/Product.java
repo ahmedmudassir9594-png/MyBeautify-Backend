@@ -23,7 +23,6 @@ public class Product {
     @Column(precision = 12, scale = 2) private BigDecimal discountPrice;
     @Column(nullable = false) private int stockQuantity;
     @Column(nullable = false) private int lowStockThreshold = 5;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) private Brand brand;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) private Category category;
     private String imageUrl;
     @Column(nullable = false) private boolean active = true;
@@ -38,9 +37,9 @@ public class Product {
     @CreationTimestamp @Column(nullable = false, updatable = false) private Instant createdAt;
     @UpdateTimestamp private Instant updatedAt;
     protected Product() {}
-    public Product(String name, String slug, String sku, BigDecimal price, int stockQuantity, Brand brand, Category category) {
+    public Product(String name, String slug, String sku, BigDecimal price, int stockQuantity, Category category) {
         this.name = name; this.slug = slug; this.sku = sku; this.price = price; this.stockQuantity = stockQuantity;
-        this.brand = brand; this.category = category;
+         this.category = category;
     }
     public Long getId() { return id; }
     public String getName() { return name; }
@@ -52,7 +51,6 @@ public class Product {
     public BigDecimal getDiscountPrice() { return discountPrice; }
     public int getStockQuantity() { return stockQuantity; }
     public int getLowStockThreshold() { return lowStockThreshold; }
-    public Brand getBrand() { return brand; }
     public Category getCategory() { return category; }
     public String getImageUrl() { return imageUrl; }
     public boolean isActive() { return active; }
@@ -71,7 +69,7 @@ public class Product {
     public void setSku(String value) { sku = value; } public void setDescription(String value) { description = value; }
     public void setShortDescription(String value) { shortDescription = value; } public void setPrice(BigDecimal value) { price = value; }
     public void setDiscountPrice(BigDecimal value) { discountPrice = value; } public void setStockQuantity(int value) { stockQuantity = value; }
-    public void setLowStockThreshold(int value) { lowStockThreshold = value; } public void setBrand(Brand value) { brand = value; }
+    public void setLowStockThreshold(int value) { lowStockThreshold = value; }
     public void setCategory(Category value) { category = value; } public void setImageUrl(String value) { imageUrl = value; }
     public void setActive(boolean value) { active = value; } public void setFeatured(boolean value) { featured = value; }
     public void setIngredients(String value) { ingredients = value; } public void setBenefits(String value) { benefits = value; }

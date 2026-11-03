@@ -28,8 +28,7 @@ class CartServiceTest {
     void addRejectsQuantityAboveAvailableStock() {
         User user = new User("Maya", "Perera", "maya@example.com", "hashed", Role.CUSTOMER);
         Category category = new Category("Skincare", "Care");
-        Brand brand = new Brand("Luma", "Beauty");
-        Product product = new Product("Serum", "serum", "SKU-1", BigDecimal.TEN, 2, brand, category);
+        Product product = new Product("Serum", "serum", "SKU-1", BigDecimal.TEN, 2, category);
         when(carts.findByUserId(any())).thenReturn(Optional.of(new Cart(user)));
         when(products.findById(1L)).thenReturn(Optional.of(product));
 

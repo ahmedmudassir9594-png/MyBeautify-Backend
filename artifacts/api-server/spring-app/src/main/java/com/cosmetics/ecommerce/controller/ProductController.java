@@ -46,13 +46,12 @@ public class ProductController {
     public ApiResponse<PageResponse<ProductResponse>> list(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) Long brandId,
             @RequestParam(required = false) Boolean featured,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return ApiResponse.ok("Products fetched successfully.",
-                products.list(query, categoryId, brandId, featured, minPrice, maxPrice, pageable));
+                products.list(query, categoryId, featured, minPrice, maxPrice, pageable));
     }
 
     @GetMapping("/{id}")
@@ -70,15 +69,7 @@ public class ProductController {
             @PathVariable Long categoryId,
             @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok("Category products fetched successfully.",
-                products.list(null, categoryId, null, null, null, null, pageable));
-    }
-
-    @GetMapping("/brands/{brandId}/products")
-    public ApiResponse<PageResponse<ProductResponse>> brandProducts(
-            @PathVariable Long brandId,
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok("Brand products fetched successfully.",
-                products.list(null, null, brandId, null, null, null, pageable));
+                products.list(null, categoryId, null, null, null, pageable));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -97,7 +88,6 @@ public class ProductController {
             @RequestParam(value = "discountPrice", required = false) BigDecimal discountPrice,
             @RequestParam(value = "stockQuantity", required = false) Integer stockQuantity,
             @RequestParam(value = "lowStockThreshold", required = false) Integer lowStockThreshold,
-            @RequestParam(value = "brandId", required = false) Long brandId,
             @RequestParam(value = "categoryId", required = false) Long categoryId,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "shortDescription", required = false) String shortDescription,
@@ -125,7 +115,7 @@ public class ProductController {
         }
 
         ProductRequest request = buildProductRequest(productJson, name, sku, price, discountPrice,
-                stockQuantity, lowStockThreshold, brandId, categoryId, description, shortDescription,
+                stockQuantity, lowStockThreshold, categoryId, description, shortDescription,
                 finalImageUrl, active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate);
 
         validateRequest(request);
@@ -149,7 +139,6 @@ public class ProductController {
             @RequestParam(value = "discountPrice", required = false) BigDecimal discountPrice,
             @RequestParam(value = "stockQuantity", required = false) Integer stockQuantity,
             @RequestParam(value = "lowStockThreshold", required = false) Integer lowStockThreshold,
-            @RequestParam(value = "brandId", required = false) Long brandId,
             @RequestParam(value = "categoryId", required = false) Long categoryId,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "shortDescription", required = false) String shortDescription,
@@ -177,7 +166,7 @@ public class ProductController {
         }
 
         ProductRequest request = buildProductRequest(productJson, name, sku, price, discountPrice,
-                stockQuantity, lowStockThreshold, brandId, categoryId, description, shortDescription,
+                stockQuantity, lowStockThreshold, categoryId, description, shortDescription,
                 finalImageUrl, active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate);
 
         validateRequest(request);
@@ -228,7 +217,7 @@ public class ProductController {
 
     private ProductRequest buildProductRequest(
             String productJson, String name, String sku, BigDecimal price, BigDecimal discountPrice,
-            Integer stockQuantity, Integer lowStockThreshold, Long brandId, Long categoryId,
+            Integer stockQuantity, Integer lowStockThreshold, Long categoryId,
             String description, String shortDescription, String imageUrl, Boolean active,
             Boolean featured, String ingredients, String benefits, String howToUse,
             String skinType, String shade, String size, Instant expiryDate) {
@@ -238,7 +227,7 @@ public class ProductController {
                 ProductRequest p = objectMapper.readValue(productJson, ProductRequest.class);
                 return new ProductRequest(
                         p.name(), p.sku(), p.price(), p.discountPrice(),
-                        p.stockQuantity(), p.lowStockThreshold(), p.brandId(), p.categoryId(),
+                        p.stockQuantity(), p.lowStockThreshold(), p.categoryId(),
                         p.description(), p.shortDescription(),
                         imageUrl != null ? imageUrl : p.imageUrl(),
                         p.active(), p.featured(), p.ingredients(), p.benefits(),
@@ -253,7 +242,7 @@ public class ProductController {
                 name, sku, price, discountPrice,
                 stockQuantity != null ? stockQuantity : 0,
                 lowStockThreshold != null ? lowStockThreshold : 5,
-                brandId, categoryId, description, shortDescription,
+                categoryId, description, shortDescription,
                 imageUrl, active != null ? active : true,
                 Boolean.TRUE.equals(featured),
                 ingredients, benefits, howToUse, skinType, shade, size, expiryDate

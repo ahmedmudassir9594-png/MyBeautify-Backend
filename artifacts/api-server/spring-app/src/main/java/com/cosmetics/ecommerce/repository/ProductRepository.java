@@ -13,7 +13,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Page<Product> findByActiveTrue(Pageable pageable);
     Page<Product> findByFeaturedTrueAndActiveTrue(Pageable pageable);
     Page<Product> findByCategoryIdAndActiveTrue(Long categoryId, Pageable pageable);
-    Page<Product> findByBrandIdAndActiveTrue(Long brandId, Pageable pageable);
     @Query("select p from Product p where p.active = true and p.price between :minPrice and :maxPrice")
     Page<Product> findByPriceBetween(@Param("minPrice") BigDecimal minPrice, @Param("maxPrice") BigDecimal maxPrice, Pageable pageable);
 
@@ -24,7 +23,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
        or lower(p.description) like lower(concat('%', :query, '%'))
        or lower(p.ingredients) like lower(concat('%', :query, '%'))
        or lower(p.skinType) like lower(concat('%', :query, '%'))
-       or lower(p.brand.name) like lower(concat('%', :query, '%'))
        or lower(p.category.name) like lower(concat('%', :query, '%')))
       """)
     Page<Product> search(@Param("query") String query, Pageable pageable);

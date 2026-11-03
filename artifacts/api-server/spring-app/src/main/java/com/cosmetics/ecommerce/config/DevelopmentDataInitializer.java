@@ -17,8 +17,8 @@ import java.util.List;
 @Configuration
 public class DevelopmentDataInitializer {
     @Bean
-    CommandLineRunner seedData(UserRepository users, CategoryRepository categories, BrandRepository brands,
-                               ProductRepository products, CouponRepository coupons, PasswordEncoder encoder,
+    CommandLineRunner seedData(UserRepository users, CategoryRepository categories, ProductRepository products,
+                               CouponRepository coupons, PasswordEncoder encoder,
                                @Value("${app.seed-data:false}") boolean enabled) {
         return args -> {
             if (!enabled || users.count() > 0) return;
@@ -40,18 +40,12 @@ public class DevelopmentDataInitializer {
                     new Category("Lip Care", "Hydrating and colorful lip essentials."),
                     new Category("Eye Makeup", "Mascara, liner, and eyeshadow."),
                     new Category("Beauty Tools", "Brushes, applicators, and beauty accessories.")));
-            List<Brand> brandList = brands.saveAll(List.of(
-                    new Brand("Luma Beauty", "Modern formulas for everyday rituals."),
-                    new Brand("Nectar & Co.", "Botanical beauty inspired by nature."),
-                    new Brand("Velvet Bloom", "Color-forward makeup with a soft finish."),
-                    new Brand("Aster Labs", "Science-led skincare for sensitive skin."),
-                    new Brand("Morrow", "Simple, considered personal care.")));
+
 
             for (int i = 1; i <= 20; i++) {
                 Category category = categoryList.get((i - 1) % categoryList.size());
-                Brand brand = brandList.get((i - 1) % brandList.size());
                 Product product = new Product("Demo " + category.getName() + " " + i, "demo-product-" + i,
-                        "DEMO-" + String.format("%04d", i), BigDecimal.valueOf(12 + i * 2L), 25 + i, brand, category);
+                        "DEMO-" + String.format("%04d", i), BigDecimal.valueOf(12 + i * 2L), 25 + i, category);
                 product.setShortDescription("A development catalog product for testing storefront flows.");
                 product.setDescription("This seeded product is available only in development and can be replaced with real catalog data.");
                 product.setImageUrl("https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=800");
