@@ -20,8 +20,38 @@ public final class OrderDtos {
                 a.getAddressLine1(), a.getAddressLine2(), a.getCity(), a.getState(), a.getPostalCode(), a.getCountry(),
                 a.getAddressType(), a.isDefault()); }
     }
-    public record OrderItemResponse(Long productId, String productName, int quantity, BigDecimal price, BigDecimal subtotal) {
-        public static OrderItemResponse from(OrderItem i) { return new OrderItemResponse(i.getProduct().getId(), i.getProductName(), i.getQuantity(), i.getPrice(), i.getSubtotal()); }
+    public record OrderItemResponse(
+            Long productId,
+            String productName,
+            int quantity,
+            BigDecimal price,
+            BigDecimal subtotal,
+            Long comboId,
+            String comboGroupId,
+            String comboType,
+            String comboName,
+            BigDecimal originalPrice,
+            BigDecimal discountAmount
+    ) {
+        public OrderItemResponse(Long productId, String productName, int quantity, BigDecimal price, BigDecimal subtotal) {
+            this(productId, productName, quantity, price, subtotal, null, null, null, null, null, null);
+        }
+
+        public static OrderItemResponse from(OrderItem i) {
+            return new OrderItemResponse(
+                    i.getProduct().getId(),
+                    i.getProductName(),
+                    i.getQuantity(),
+                    i.getPrice(),
+                    i.getSubtotal(),
+                    i.getComboId(),
+                    i.getComboGroupId(),
+                    i.getComboType() != null ? i.getComboType().name() : null,
+                    i.getComboName(),
+                    i.getOriginalPrice(),
+                    i.getDiscountAmount()
+            );
+        }
     }
     public record OrderResponse(Long id, String orderNumber, BigDecimal subtotal, BigDecimal discountAmount, BigDecimal shippingCharge,
                                 BigDecimal taxAmount, BigDecimal totalAmount, PaymentStatus paymentStatus, OrderStatus orderStatus,
