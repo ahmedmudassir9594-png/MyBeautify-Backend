@@ -13,8 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.Year;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import com.cosmetics.ecommerce.email.EmailService;
 
@@ -54,14 +56,28 @@ public class OrderService {
         Address address = addresses.findByIdAndUserId(request.shippingAddressId(), user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Selected shipping address was not found."));
 
+        Map<Long, Integer> totalProductQuantities = new HashMap<>();
+        for (CartItem item : cart.getItems()) {
+            totalProductQuantities.merge(item.getProduct().getId(), item.getQuantity(), Integer::sum);
+        }
+
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem item : cart.getItems()) {
             Product product = item.getProduct();
             if (!product.isActive()) throw new BadRequestException("Product " + product.getName() + " is no longer available.");
-            if (product.getStockQuantity() < item.getQuantity()) {
+            int totalReq = totalProductQuantities.get(product.getId());
+            if (product.getStockQuantity() < totalReq) {
                 throw new InsufficientStockException("Insufficient stock for " + product.getName() + ".");
             }
-            subtotal = subtotal.add(product.sellingPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+
+            if (item.getCombo() != null && !item.getCombo().isValidNow(Instant.now())) {
+                throw new BadRequestException("Combo '" + item.getComboName() + "' is no longer valid or has expired.");
+            }
+
+            BigDecimal effectivePrice = (item.getComboGroupId() != null && item.getPrice() != null)
+                    ? item.getPrice()
+                    : product.sellingPrice();
+            subtotal = subtotal.add(effectivePrice.multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
         Coupon coupon = null;
@@ -117,7 +133,24 @@ public class OrderService {
         for (CartItem item : cart.getItems()) {
             Product product = item.getProduct();
             product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
-            order.getItems().add(new OrderItem(order, product, item.getQuantity(), product.sellingPrice()));
+
+            BigDecimal itemPrice = (item.getComboGroupId() != null && item.getPrice() != null)
+                    ? item.getPrice()
+                    : product.sellingPrice();
+
+            OrderItem orderItem = new OrderItem(
+                    order,
+                    product,
+                    item.getQuantity(),
+                    itemPrice,
+                    item.getCombo() != null ? item.getCombo().getId() : null,
+                    item.getComboGroupId(),
+                    item.getComboType(),
+                    item.getComboName(),
+                    item.getOriginalPrice() != null ? item.getOriginalPrice() : product.sellingPrice(),
+                    item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO
+            );
+            order.getItems().add(orderItem);
         }
 
         if (coupon != null) coupon.incrementUsedCount();
