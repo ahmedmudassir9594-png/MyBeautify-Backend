@@ -79,10 +79,10 @@ class OrderServiceLifecycleTest {
         when(cartService.entity(user1)).thenReturn(cart);
         when(addresses.findByIdAndUserId(5L, 10L)).thenReturn(Optional.of(address));
         when(paymentGateway.charge(any(BigDecimal.class), any(PaymentMethod.class)))
-                .thenReturn(new PaymentResult("TXN-123", "MOCK", true));
+                .thenReturn(new PaymentResult("TXN-123", "CASH_ON_DELIVERY", true));
         when(orders.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        OrderRequest request = new OrderRequest(5L, PaymentMethod.MOCK, null);
+        OrderRequest request = new OrderRequest(5L, PaymentMethod.CASH_ON_DELIVERY, null);
         OrderResponse response = orderService.checkout(user1, request);
 
         assertThat(response).isNotNull();
@@ -106,9 +106,9 @@ class OrderServiceLifecycleTest {
         when(cartService.entity(user1)).thenReturn(cart);
         when(addresses.findByIdAndUserId(5L, 10L)).thenReturn(Optional.of(address));
         when(paymentGateway.charge(any(BigDecimal.class), any(PaymentMethod.class)))
-                .thenReturn(new PaymentResult(null, "MOCK", false));
+                .thenReturn(new PaymentResult(null, "CASH_ON_DELIVERY", false));
 
-        OrderRequest request = new OrderRequest(5L, PaymentMethod.MOCK, null);
+        OrderRequest request = new OrderRequest(5L, PaymentMethod.CASH_ON_DELIVERY, null);
 
         assertThatThrownBy(() -> orderService.checkout(user1, request))
                 .isInstanceOf(BadRequestException.class)
@@ -124,7 +124,7 @@ class OrderServiceLifecycleTest {
     void customerCancellationRestoresStock() {
         Address address = new Address(user1, "Maya", "+9411", "123 Main", "Colombo", "00100", "LK");
         Order order = new Order("COS-2026-TEST1", user1, address, new BigDecimal("50.00"), BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.MOCK);
+                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.CASH_ON_DELIVERY);
         order.setOrderStatus(OrderStatus.CONFIRMED);
         order.getItems().add(new OrderItem(order, product, 3, new BigDecimal("25.00")));
         product.setStockQuantity(7); // After ordering 3 units
@@ -154,7 +154,7 @@ class OrderServiceLifecycleTest {
     void customerCannotCancelDeliveredOrder() {
         Address address = new Address(user1, "Maya", "+9411", "123 Main", "Colombo", "00100", "LK");
         Order order = new Order("COS-2026-TEST2", user1, address, new BigDecimal("50.00"), BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.MOCK);
+                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.CASH_ON_DELIVERY);
         order.setOrderStatus(OrderStatus.DELIVERED);
 
         when(orders.findByIdAndUserId(2L, 10L)).thenReturn(Optional.of(order));
@@ -169,7 +169,7 @@ class OrderServiceLifecycleTest {
     void adminStatusTransitionToCancelledRestoresStock() {
         Address address = new Address(user1, "Maya", "+9411", "123 Main", "Colombo", "00100", "LK");
         Order order = new Order("COS-2026-TEST3", user1, address, new BigDecimal("50.00"), BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.MOCK);
+                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.CASH_ON_DELIVERY);
         order.setOrderStatus(OrderStatus.CONFIRMED);
         order.getItems().add(new OrderItem(order, product, 4, new BigDecimal("25.00")));
         product.setStockQuantity(6);
@@ -187,7 +187,7 @@ class OrderServiceLifecycleTest {
     void invalidStatusTransitionIsRejected() {
         Address address = new Address(user1, "Maya", "+9411", "123 Main", "Colombo", "00100", "LK");
         Order order = new Order("COS-2026-TEST4", user1, address, new BigDecimal("50.00"), BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.MOCK);
+                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("50.00"), PaymentMethod.CASH_ON_DELIVERY);
         order.setOrderStatus(OrderStatus.CONFIRMED);
 
         when(orders.findById(4L)).thenReturn(Optional.of(order));

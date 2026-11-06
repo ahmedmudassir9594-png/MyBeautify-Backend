@@ -2,13 +2,16 @@ package com.cosmetics.ecommerce.controller;
 
 import com.cosmetics.ecommerce.dto.*;
 import com.cosmetics.ecommerce.dto.CatalogDtos.*;
+import com.cosmetics.ecommerce.dto.SubcategoryDtos.SubcategoryResponse;
 import com.cosmetics.ecommerce.exception.BadRequestException;
 import com.cosmetics.ecommerce.service.CatalogService;
 import com.cosmetics.ecommerce.service.FileStorageService;
+import com.cosmetics.ecommerce.service.SubcategoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Valid;
 import jakarta.validation.Validator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -17,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,18 +31,28 @@ public class CatalogController {
     private final FileStorageService fileStorageService;
     private final ObjectMapper objectMapper;
     private final Validator validator;
+    private final SubcategoryService subcategoryService;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    public CatalogController(CatalogService catalog, FileStorageService fileStorageService,
-                             ObjectMapper objectMapper, Validator validator) {
+    @Autowired
+    public CatalogController(CatalogService catalog,
+                             @Autowired(required = false) FileStorageService fileStorageService,
+                             ObjectMapper objectMapper,
+                             Validator validator,
+                             @Autowired(required = false) SubcategoryService subcategoryService) {
         this.catalog = catalog;
         this.fileStorageService = fileStorageService;
         this.objectMapper = objectMapper;
         this.validator = validator;
+        this.subcategoryService = subcategoryService;
+    }
+
+    public CatalogController(CatalogService catalog, FileStorageService fileStorageService,
+                             ObjectMapper objectMapper, Validator validator) {
+        this(catalog, fileStorageService, objectMapper, validator, null);
     }
 
     public CatalogController(CatalogService catalog) {
-        this(catalog, null, new ObjectMapper(), null);
+        this(catalog, null, new ObjectMapper(), null, null);
     }
 
     @GetMapping("/categoriesASC")
@@ -55,6 +69,25 @@ public class CatalogController {
     @GetMapping("/categories/{id}")
     public ApiResponse<CategoryResponse> category(@PathVariable Long id) {
         return ApiResponse.ok("Category fetched successfully.", catalog.category(id));
+    }
+
+    @GetMapping({"/categories/{categoryId}/subcategories", "/api/categories/{categoryId}/subcategories"})
+    public ApiResponse<List<SubcategoryResponse>> categorySubcategories(@PathVariable Long categoryId) {
+        if (subcategoryService == null) {
+            return ApiResponse.ok("Subcategories fetched successfully.", Collections.emptyList());
+        }
+        return ApiResponse.ok("Subcategories fetched successfully.",
+                subcategoryService.getByParentCategory(categoryId, true));
+    }
+
+    @GetMapping({"/admin/categories/{categoryId}/subcategories", "/api/admin/categories/{categoryId}/subcategories"})
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<List<SubcategoryResponse>> adminCategorySubcategories(@PathVariable Long categoryId) {
+        if (subcategoryService == null) {
+            return ApiResponse.ok("Subcategories fetched successfully.", Collections.emptyList());
+        }
+        return ApiResponse.ok("Subcategories fetched successfully.",
+                subcategoryService.getByParentCategory(categoryId, false));
     }
 
    @PostMapping(value = "/admin/categories", consumes = MediaType.APPLICATION_JSON_VALUE)

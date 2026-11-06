@@ -26,7 +26,7 @@ classDiagram
         +String name
         +String slug
         +String description
-        +String imageUrl
+        +String imageFileName
         +BigDecimal originalPrice
         +BigDecimal sellingPrice
         +BigDecimal discountAmount
@@ -103,7 +103,9 @@ classDiagram
 
 ## 3. Database Schema & Flyway Migration
 
-Database changes are managed via Flyway migration script `V3__create_combos_and_offers_tables.sql`.
+Database changes are managed via Flyway migration scripts:
+- `V3__create_combos_and_offers_tables.sql` (Initial tables creation)
+- `V6__update_combos_image_file_name.sql` (Replaces `image_url` with `image_file_name` to store UUID storage filenames exclusively)
 
 ### 3.1 `combos` Table
 | Column | Type | Constraints / Defaults | Description |
@@ -112,7 +114,7 @@ Database changes are managed via Flyway migration script `V3__create_combos_and_
 | `name` | `VARCHAR(180)` | NOT NULL, UNIQUE | Display name (e.g., "Royal Elegance") |
 | `slug` | `VARCHAR(220)` | NOT NULL, UNIQUE | SEO URL slug |
 | `description` | `VARCHAR(2000)` | NULL | Detailed set description |
-| `image_url` | `VARCHAR(1000)` | NULL | Promotional banner / image URL |
+| `image_file_name` | `VARCHAR(255)` | NULL | Stored image filename (UUID.ext, e.g., `8622c1b1-...png`) |
 | `original_price` | `DECIMAL(12,2)`| NOT NULL, DEFAULT 0.00 | Total standard component price |
 | `selling_price` | `DECIMAL(12,2)` | NOT NULL, DEFAULT 0.00 | Bundle promotional price |
 | `discount_amount` | `DECIMAL(12,2)`| NOT NULL, DEFAULT 0.00 | Total customer savings |
@@ -238,7 +240,8 @@ Returns paginated list of active, valid predefined combos.
         "name": "Royal Elegance",
         "slug": "royal-elegance",
         "description": "Necklace + Earrings set for regal elegance.",
-        "imageUrl": "https://malkaz.com/images/royal-elegance.jpg",
+        "imageFileName": "8622c1b1-d11c-4afb-9dbc-1205a44d8c11.png",
+        "imageUrl": "/api/uploads/8622c1b1-d11c-4afb-9dbc-1205a44d8c11.png",
         "originalPrice": 1999.00,
         "sellingPrice": 1499.00,
         "savingsAmount": 500.00,
@@ -384,7 +387,9 @@ Atomically removes all items belonging to a specific combo instance in the user'
 Lists all combos with optional search query parameter (`?query=festive`).
 
 #### `POST /api/admin/combos`
-Creates a new predefined combo bundle.
+Creates a new predefined combo bundle. Supports both `application/json` and `multipart/form-data`.
+
+**JSON Format:**
 ```bash
 curl -X POST http://localhost:8080/api/admin/combos \
   -H "Authorization: Bearer <admin-token>" \
@@ -405,14 +410,54 @@ curl -X POST http://localhost:8080/api/admin/combos \
   }'
 ```
 
+**Multipart Upload (`multipart/form-data`):**
+```bash
+curl -X POST http://localhost:8080/api/admin/combos \
+  -H "Authorization: Bearer <admin-token>" \
+  -F 'image=@/path/to/festive-glow.png;type=image/png' \
+  -F 'combo={"name":"Festive Glow","sellingPrice":2199.00,"originalPrice":2899.00,"active":true,"featured":true,"items":[{"productId":10,"quantity":1},{"productId":11,"quantity":1}]}'
+```
+
 #### `PUT /api/admin/combos/{id}`
-Updates an existing combo and recalculates component pricing.
+Updates an existing combo. Supports both `application/json` and `multipart/form-data`.
+- If an image file is provided, the new image is uploaded and stored, the database record is updated, and the previous image is safely deleted from disk *only after* the database update succeeds.
+- If no image is provided, the existing image is preserved.
+
+#### `POST /api/admin/combos/{id}/image`
+Directly replaces or uploads an image for a specific combo:
+```bash
+curl -X POST http://localhost:8080/api/admin/combos/1/image \
+  -H "Authorization: Bearer <admin-token>" \
+  -F 'file=@/path/to/new-look.jpg;type=image/jpeg'
+```
+
+#### `POST /api/admin/combos/upload-image`
+Standalone image upload endpoint returning an `ImageUploadResponse` with public and relative retrieval paths:
+```bash
+curl -X POST http://localhost:8080/api/admin/combos/upload-image \
+  -H "Authorization: Bearer <admin-token>" \
+  -F 'file=@/path/to/jewel-offer.png;type=image/png'
+```
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Image uploaded successfully.",
+  "data": {
+    "imageUrl": "http://localhost:8080/api/uploads/8622c1b1-d11c-4afb-9dbc-1205a44d8c11.png",
+    "relativeUrl": "/api/uploads/8622c1b1-d11c-4afb-9dbc-1205a44d8c11.png",
+    "fileName": "8622c1b1-d11c-4afb-9dbc-1205a44d8c11.png",
+    "size": 245100,
+    "contentType": "image/png"
+  }
+}
+```
 
 #### `PATCH /api/admin/combos/{id}/status`
 Toggles active status (`{"active": false}`).
 
 #### `DELETE /api/admin/combos/{id}`
-Deletes a combo.
+Deletes a combo and safely removes its stored image file from disk (after confirming no other combo references the same file via `countByImageFileName`).
 
 #### `GET /api/admin/combos/rules`
 Lists all custom combo discount rules.
@@ -445,14 +490,27 @@ Deletes a discount rule.
 The feature includes comprehensive unit and integration test coverage:
 
 - **`ComboPricingServiceTest`**: Validates proportional discount distribution, half-up rounding, minimum distinct product thresholds, discount caps, and penny conservation.
-- **`ComboIntegrationTest`**: Full MockMvc integration tests verifying public catalog routes, unauthenticated protection (401), customer forbidden routes (403), authenticated cart modifications, combo group deletions, and admin CRUD operations.
+- **`ComboIntegrationTest`**: Full MockMvc integration tests verifying:
+  - Public catalog routes (`/combos`, `/combos/{slug}`) exposing `imageFileName` and `/api/uploads/{imageFileName}` URL.
+  - Predefined combos and Custom Combo (BYOC) pricing and cart operations.
+  - Multipart image file upload for combo creation (`.png`, `.jpg`).
+  - Creation without image.
+  - Image format validation (rejection of `.txt`, invalid headers).
+  - Oversized file rejection (> 5MB).
+  - Image replacement with guaranteed atomic lifecycle (old image file deleted from disk *only after* DB update succeeds).
+  - Update without image preserving existing image.
+  - Safe deletion upon combo removal.
+  - Safe deletion check preventing deletion when an image file is shared across multiple combos (`countByImageFileName`).
+  - Standalone image upload (`/admin/combos/upload-image`).
+  - Direct combo image update (`/admin/combos/{id}/image`).
+  - Role-based security (unauthenticated 401, customer 403).
 
 To execute the entire test suite:
 ```powershell
 $env:JAVA_HOME="C:\Users\HP\.jdks\ms-21.0.9"
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"
-cd artifacts/api-server/spring-app
+cd cosmeticszainab/Cosmetics-E-Commerce-Backend/artifacts/api-server/spring-app
 mvn test
 ```
-**Test Results**: **92 tests run, 0 failures, 0 errors**.
+**Test Results**: **144 tests run, 0 failures, 0 errors (BUILD SUCCESS)**.
 

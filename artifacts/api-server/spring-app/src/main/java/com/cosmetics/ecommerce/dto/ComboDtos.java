@@ -5,6 +5,7 @@ import com.cosmetics.ecommerce.entity.ComboDiscountRule;
 import com.cosmetics.ecommerce.entity.ComboItem;
 import com.cosmetics.ecommerce.entity.Product;
 import com.cosmetics.ecommerce.enums.DiscountType;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -70,7 +71,8 @@ public final class ComboDtos {
             @NotBlank @Size(max = 180) String name,
             String slug,
             String description,
-            String imageUrl,
+            @JsonAlias({"imageUrl", "image_url", "imageFileName", "image_file_name"})
+            String imageFileName,
             @NotNull @DecimalMin("0.01") BigDecimal sellingPrice,
             BigDecimal originalPrice,
             Instant startDate,
@@ -85,6 +87,7 @@ public final class ComboDtos {
             String name,
             String slug,
             String description,
+            String imageFileName,
             String imageUrl,
             BigDecimal originalPrice,
             BigDecimal sellingPrice,
@@ -106,12 +109,24 @@ public final class ComboDtos {
             boolean inStock = combo.isActive()
                     && !itemResponses.isEmpty()
                     && itemResponses.stream().allMatch(ComboItemResponse::inStock);
+
+            String fileName = combo.getImageFileName();
+            String imageUrl = null;
+            if (fileName != null && !fileName.isBlank()) {
+                if (fileName.startsWith("http://") || fileName.startsWith("https://") || fileName.startsWith("/")) {
+                    imageUrl = fileName;
+                } else {
+                    imageUrl = "/api/uploads/" + fileName;
+                }
+            }
+
             return new ComboResponse(
                     combo.getId(),
                     combo.getName(),
                     combo.getSlug(),
                     combo.getDescription(),
-                    combo.getImageUrl(),
+                    fileName,
+                    imageUrl,
                     combo.getOriginalPrice(),
                     combo.getSellingPrice(),
                     combo.getDiscountAmount(),

@@ -34,4 +34,54 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Double averageRating(@Param("productId") Long productId);
 
     long countByImageUrl(String imageUrl);
+
+    long countByCategoryId(Long categoryId);
+
+    long countByCategoryIdAndActiveTrue(Long categoryId);
+
+    long countBySubcategoryId(Long subcategoryId);
+
+    long countBySubcategoryIdAndActiveTrue(Long subcategoryId);
+
+    Page<Product> findBySubcategoryIdAndActiveTrue(Long subcategoryId, Pageable pageable);
+
+    @Query("""
+        SELECT p FROM Product p
+        JOIN FETCH p.category
+        WHERE p.category.id = :categoryId
+          AND p.active = true
+          AND p.id != :excludeId
+        ORDER BY p.featured DESC, p.createdAt DESC
+    """)
+    java.util.List<Product> findByCategoryExcludingProduct(@Param("categoryId") Long categoryId,
+                                                          @Param("excludeId") Long excludeId,
+                                                          Pageable pageable);
+
+    @Query("""
+        SELECT p FROM Product p
+        JOIN FETCH p.category
+        WHERE p.active = true
+          AND p.id != :excludeId
+          AND (
+              (p.category.id = :categoryId)
+              OR (lower(p.name) LIKE lower(concat('%', :keyword, '%')))
+              OR (lower(p.description) LIKE lower(concat('%', :keyword, '%')))
+          )
+        ORDER BY (CASE WHEN p.category.id = :categoryId THEN 1 ELSE 2 END),
+                 p.featured DESC, p.createdAt DESC
+    """)
+    java.util.List<Product> findCandidateSimilarProducts(@Param("excludeId") Long excludeId,
+                                                        @Param("categoryId") Long categoryId,
+                                                        @Param("keyword") String keyword,
+                                                        Pageable pageable);
+
+    @Query("""
+        SELECT p FROM Product p
+        JOIN FETCH p.category
+        WHERE p.active = true
+          AND p.id != :excludeId
+        ORDER BY p.featured DESC, p.createdAt DESC
+    """)
+    java.util.List<Product> findCatalogFallbackProducts(@Param("excludeId") Long excludeId,
+                                                       Pageable pageable);
 }

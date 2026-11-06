@@ -2,7 +2,10 @@ package com.cosmetics.ecommerce.enums;
 
 public enum PaymentStatus {
     PENDING,
+    AUTHORIZED,
     SUCCESS,
     FAILED,
-    REFUNDED
+    REFUND_PENDING,
+    REFUNDED,
+    PARTIALLY_REFUNDED
 }

@@ -56,10 +56,12 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
-                                "/referrals/validate"
+                                "/referrals/validate",
+                                "/payments/razorpay/webhook"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/categoriesASC/**", "/uploads/**", "/combos/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/categoriesASC/**", "/subcategories/**", "/uploads/**", "/combos/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/combos/custom/preview").permitAll()
+                        .requestMatchers("/admin/payments/*/refund").hasRole("ADMIN")
                         .requestMatchers("/admin/audit-logs/**").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasAnyRole("ADMIN", "STAFF")
                         .anyRequest().authenticated())

@@ -4,11 +4,40 @@ import com.cosmetics.ecommerce.entity.*;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 
 public final class CatalogDtos {
     private CatalogDtos() {}
-    public record CategoryResponse(Long id, String name, String description, String imageUrl, boolean active) {
-        public static CategoryResponse from(Category c) { return new CategoryResponse(c.getId(), c.getName(), c.getDescription(), c.getImageUrl(), c.isActive()); }
+    public record CategoryResponse(
+            Long id,
+            String name,
+            String description,
+            String imageUrl,
+            boolean active,
+            long subcategoriesCount,
+            List<SubcategoryDtos.SubcategoryResponse> subcategories
+    ) {
+        public CategoryResponse(Long id, String name, String description, String imageUrl, boolean active) {
+            this(id, name, description, imageUrl, active, 0L, Collections.emptyList());
+        }
+
+        public CategoryResponse(Long id, String name, String description, String imageUrl, boolean active, long subcategoriesCount) {
+            this(id, name, description, imageUrl, active, subcategoriesCount, Collections.emptyList());
+        }
+
+        public static CategoryResponse from(Category c) {
+            return new CategoryResponse(c.getId(), c.getName(), c.getDescription(), c.getImageUrl(), c.isActive(), 0L, Collections.emptyList());
+        }
+
+        public static CategoryResponse from(Category c, long subcategoriesCount) {
+            return new CategoryResponse(c.getId(), c.getName(), c.getDescription(), c.getImageUrl(), c.isActive(), subcategoriesCount, Collections.emptyList());
+        }
+
+        public static CategoryResponse from(Category c, long subcategoriesCount, List<SubcategoryDtos.SubcategoryResponse> subcategories) {
+            return new CategoryResponse(c.getId(), c.getName(), c.getDescription(), c.getImageUrl(), c.isActive(), subcategoriesCount,
+                    subcategories != null ? subcategories : Collections.emptyList());
+        }
     }
     public record CategoryRequest(@NotBlank @Size(max = 120) String name, @Size(max = 1000) String description, String imageUrl, Boolean active) {}
 
@@ -18,17 +47,42 @@ public final class CatalogDtos {
                                  @NotNull Long categoryId, String description, String shortDescription,
                                  String imageUrl, Boolean active, Boolean featured, String ingredients, String benefits,
                                  String howToUse, String skinType, String shade, String size, Instant expiryDate) {}
-    public record ProductResponse(Long id, String name, String slug, String sku, String description, String shortDescription,
-                                  BigDecimal price, BigDecimal discountPrice, BigDecimal sellingPrice, int stockQuantity,
-                                  int lowStockThreshold, Long categoryId, String categoryName,
-                                  String imageUrl, boolean active, boolean featured, String ingredients, String benefits,
-                                  String howToUse, String skinType, String shade, String size, Instant expiryDate, double averageRating) {
+    public record ProductResponse(
+            Long id, String name, String slug, String sku, String description, String shortDescription,
+            BigDecimal price, BigDecimal discountPrice, BigDecimal sellingPrice, int stockQuantity,
+            int lowStockThreshold, Long categoryId, String categoryName,
+            String imageUrl, boolean active, boolean featured, String ingredients, String benefits,
+            String howToUse, String skinType, String shade, String size, Instant expiryDate, double averageRating,
+            Long brandId, String brandName, String relationshipType, List<ProductResponse> similarProducts
+    ) {
+        public ProductResponse(Long id, String name, String slug, String sku, String description, String shortDescription,
+                               BigDecimal price, BigDecimal discountPrice, BigDecimal sellingPrice, int stockQuantity,
+                               int lowStockThreshold, Long categoryId, String categoryName,
+                               String imageUrl, boolean active, boolean featured, String ingredients, String benefits,
+                               String howToUse, String skinType, String shade, String size, Instant expiryDate, double averageRating) {
+            this(id, name, slug, sku, description, shortDescription, price, discountPrice, sellingPrice, stockQuantity,
+                    lowStockThreshold, categoryId, categoryName, imageUrl, active, featured, ingredients, benefits,
+                    howToUse, skinType, shade, size, expiryDate, averageRating, 1L, "MALKAZ", null, Collections.emptyList());
+        }
+
         public static ProductResponse from(Product p, double rating) {
             return new ProductResponse(p.getId(), p.getName(), p.getSlug(), p.getSku(), p.getDescription(), p.getShortDescription(),
                     p.getPrice(), p.getDiscountPrice(), p.sellingPrice(), p.getStockQuantity(), p.getLowStockThreshold(),
-                    p.getCategory().getId(), p.getCategory().getName(),
+                    p.getCategory() != null ? p.getCategory().getId() : null,
+                    p.getCategory() != null ? p.getCategory().getName() : "Fine Jewellery",
                     p.getImageUrl(), p.isActive(), p.isFeatured(), p.getIngredients(), p.getBenefits(), p.getHowToUse(),
-                    p.getSkinType(), p.getShade(), p.getSize(), p.getExpiryDate(), rating);
+                    p.getSkinType(), p.getShade(), p.getSize(), p.getExpiryDate(), rating,
+                    1L, "MALKAZ", null, Collections.emptyList());
+        }
+
+        public static ProductResponse from(Product p, double rating, List<ProductResponse> similar) {
+            return new ProductResponse(p.getId(), p.getName(), p.getSlug(), p.getSku(), p.getDescription(), p.getShortDescription(),
+                    p.getPrice(), p.getDiscountPrice(), p.sellingPrice(), p.getStockQuantity(), p.getLowStockThreshold(),
+                    p.getCategory() != null ? p.getCategory().getId() : null,
+                    p.getCategory() != null ? p.getCategory().getName() : "Fine Jewellery",
+                    p.getImageUrl(), p.isActive(), p.isFeatured(), p.getIngredients(), p.getBenefits(), p.getHowToUse(),
+                    p.getSkinType(), p.getShade(), p.getSize(), p.getExpiryDate(), rating,
+                    1L, "MALKAZ", null, similar != null ? similar : Collections.emptyList());
         }
     }
 }

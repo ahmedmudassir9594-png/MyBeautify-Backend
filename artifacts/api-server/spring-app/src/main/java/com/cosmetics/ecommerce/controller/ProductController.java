@@ -2,13 +2,17 @@ package com.cosmetics.ecommerce.controller;
 
 import com.cosmetics.ecommerce.dto.*;
 import com.cosmetics.ecommerce.dto.CatalogDtos.*;
+import com.cosmetics.ecommerce.dto.ProductRelationshipDtos.*;
+import com.cosmetics.ecommerce.enums.RelationshipType;
 import com.cosmetics.ecommerce.exception.BadRequestException;
 import com.cosmetics.ecommerce.service.FileStorageService;
 import com.cosmetics.ecommerce.service.ProductService;
+import com.cosmetics.ecommerce.service.SimilarProductService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Valid;
 import jakarta.validation.Validator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.*;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
@@ -28,30 +32,39 @@ public class ProductController {
     private final FileStorageService fileStorageService;
     private final ObjectMapper objectMapper;
     private final Validator validator;
+    private final SimilarProductService similarProductService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ProductController(ProductService products, FileStorageService fileStorageService,
-                             ObjectMapper objectMapper, Validator validator) {
+                             ObjectMapper objectMapper, Validator validator,
+                             @Autowired(required = false) SimilarProductService similarProductService) {
         this.products = products;
         this.fileStorageService = fileStorageService;
         this.objectMapper = objectMapper;
         this.validator = validator;
+        this.similarProductService = similarProductService;
+    }
+
+    public ProductController(ProductService products, FileStorageService fileStorageService,
+                             ObjectMapper objectMapper, Validator validator) {
+        this(products, fileStorageService, objectMapper, validator, null);
     }
 
     public ProductController(ProductService products) {
-        this(products, null, new ObjectMapper(), null);
+        this(products, null, new ObjectMapper(), null, null);
     }
 
     @GetMapping
     public ApiResponse<PageResponse<ProductResponse>> list(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Long subcategoryId,
             @RequestParam(required = false) Boolean featured,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return ApiResponse.ok("Products fetched successfully.",
-                products.list(query, categoryId, featured, minPrice, maxPrice, pageable));
+                products.list(query, categoryId, subcategoryId, featured, minPrice, maxPrice, pageable));
     }
 
     @GetMapping("/{id}")
@@ -70,6 +83,85 @@ public class ProductController {
             @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok("Category products fetched successfully.",
                 products.list(null, categoryId, null, null, null, pageable));
+    }
+
+    @GetMapping("/subcategories/{subcategoryId}/products")
+    public ApiResponse<PageResponse<ProductResponse>> subcategoryProducts(
+            @PathVariable Long subcategoryId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok("Subcategory products fetched successfully.",
+                products.list(null, null, subcategoryId, null, null, null, pageable));
+    }
+
+    @GetMapping("/{id}/similar")
+    public ApiResponse<PageResponse<SimilarProductResponse>> getSimilar(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "4") int limit,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) RelationshipType type) {
+        if (similarProductService == null) {
+            throw new IllegalStateException("Similar product service is not available.");
+        }
+        return ApiResponse.ok("Similar products fetched successfully.",
+                similarProductService.findSimilarProducts(id, limit, page, type));
+    }
+
+    @GetMapping("/slug/{slug}/similar")
+    public ApiResponse<PageResponse<SimilarProductResponse>> getSimilarBySlug(
+            @PathVariable String slug,
+            @RequestParam(defaultValue = "4") int limit,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(required = false) RelationshipType type) {
+        if (similarProductService == null) {
+            throw new IllegalStateException("Similar product service is not available.");
+        }
+        return ApiResponse.ok("Similar products fetched successfully.",
+                similarProductService.findSimilarProductsBySlug(slug, limit, page, type));
+    }
+
+    @GetMapping("/{id}/relationships")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<java.util.List<ProductRelationshipResponse>> getRelationships(@PathVariable Long id) {
+        if (similarProductService == null) {
+            throw new IllegalStateException("Similar product service is not available.");
+        }
+        return ApiResponse.ok("Product relationships fetched successfully.",
+                similarProductService.getRelationshipsForProduct(id));
+    }
+
+    @PostMapping("/{id}/relationships")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<ProductRelationshipResponse> addRelationship(
+            @PathVariable Long id,
+            @Valid @RequestBody ProductRelationshipRequest request) {
+        if (similarProductService == null) {
+            throw new IllegalStateException("Similar product service is not available.");
+        }
+        return ApiResponse.ok("Product relationship created successfully.",
+                similarProductService.addRelationship(id, request));
+    }
+
+    @DeleteMapping("/{id}/relationships/{relatedId}")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<Void> removeRelationship(
+            @PathVariable Long id,
+            @PathVariable Long relatedId,
+            @RequestParam(required = false) RelationshipType type) {
+        if (similarProductService == null) {
+            throw new IllegalStateException("Similar product service is not available.");
+        }
+        similarProductService.removeRelationship(id, relatedId, type);
+        return ApiResponse.ok("Product relationship removed successfully.", null);
+    }
+
+    @DeleteMapping("/relationships/{relationshipId}")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<Void> removeRelationshipById(@PathVariable Long relationshipId) {
+        if (similarProductService == null) {
+            throw new IllegalStateException("Similar product service is not available.");
+        }
+        similarProductService.removeRelationshipById(relationshipId);
+        return ApiResponse.ok("Product relationship removed successfully.", null);
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)

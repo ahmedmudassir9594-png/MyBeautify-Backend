@@ -16,3 +16,8 @@ app:
   storage:
     upload-dir: target/test-uploads
     max-file-size-bytes: 5242880
+  razorpay:
+    key-id: rzp_test_MALKAZTestKey123
+    key-secret: test_secret_malkaz_4567890
+    webhook-secret: test_webhook_secret_malkaz_987654
+    currency: INR

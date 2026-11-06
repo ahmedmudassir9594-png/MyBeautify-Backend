@@ -32,8 +32,8 @@ public class Combo {
     @Column(length = 2000)
     private String description;
 
-    @Column(length = 1000)
-    private String imageUrl;
+    @Column(name = "image_file_name", length = 255)
+    private String imageFileName;
 
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal originalPrice = BigDecimal.ZERO;
@@ -101,12 +101,12 @@ public class Combo {
         this.description = description;
     }
 
-    public String getImageUrl() {
-        return imageUrl;
+    public String getImageFileName() {
+        return imageFileName;
     }
 
-    public void setImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
+    public void setImageFileName(String imageFileName) {
+        this.imageFileName = imageFileName;
     }
 
     public BigDecimal getOriginalPrice() {

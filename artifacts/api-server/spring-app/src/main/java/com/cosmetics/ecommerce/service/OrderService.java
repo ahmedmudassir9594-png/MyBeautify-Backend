@@ -2,10 +2,13 @@ package com.cosmetics.ecommerce.service;
 
 import com.cosmetics.ecommerce.dto.*;
 import com.cosmetics.ecommerce.dto.OrderDtos.*;
+import com.cosmetics.ecommerce.dto.PaymentDtos.*;
 import com.cosmetics.ecommerce.entity.*;
 import com.cosmetics.ecommerce.enums.*;
 import com.cosmetics.ecommerce.exception.*;
 import com.cosmetics.ecommerce.payment.PaymentGateway;
+import com.cosmetics.ecommerce.payment.RazorpayService;
+import com.cosmetics.ecommerce.payment.RazorpaySignatureUtil;
 import com.cosmetics.ecommerce.repository.*;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
@@ -18,6 +21,7 @@ import java.time.Year;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import com.cosmetics.ecommerce.email.EmailService;
 
 @Service
@@ -32,28 +36,45 @@ public class OrderService {
     private final EmailService emailService;
     private final ReferralService referralService;
     private final AuditLogService auditLogService;
+    private final RazorpayService razorpayService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public OrderService(OrderRepository orders, CartService cartService, AddressRepository addresses, CouponRepository coupons,
                         PaymentRepository payments, PaymentGateway paymentGateway, ProductRepository products, EmailService emailService,
-                        ReferralService referralService, AuditLogService auditLogService) {
+                        ReferralService referralService, AuditLogService auditLogService, RazorpayService razorpayService) {
         this.orders = orders; this.cartService = cartService; this.addresses = addresses; this.coupons = coupons;
         this.payments = payments; this.paymentGateway = paymentGateway; this.products = products; this.emailService = emailService;
-        this.referralService = referralService; this.auditLogService = auditLogService;
+        this.referralService = referralService; this.auditLogService = auditLogService; this.razorpayService = razorpayService;
+    }
+
+    public OrderService(OrderRepository orders, CartService cartService, AddressRepository addresses, CouponRepository coupons,
+                        PaymentRepository payments, PaymentGateway paymentGateway, ProductRepository products, EmailService emailService,
+                        ReferralService referralService, AuditLogService auditLogService) {
+        this(orders, cartService, addresses, coupons, payments, paymentGateway, products, emailService, referralService, auditLogService, null);
     }
 
     public OrderService(OrderRepository orders, CartService cartService, AddressRepository addresses, CouponRepository coupons,
                         PaymentRepository payments, PaymentGateway paymentGateway, ProductRepository products, EmailService emailService,
                         ReferralService referralService) {
-        this(orders, cartService, addresses, coupons, payments, paymentGateway, products, emailService, referralService, null);
+        this(orders, cartService, addresses, coupons, payments, paymentGateway, products, emailService, referralService, null, null);
     }
 
-    @Transactional
-    public OrderResponse checkout(User user, OrderRequest request) {
+    private record PricingDetails(
+            Cart cart,
+            Address address,
+            BigDecimal subtotal,
+            Coupon coupon,
+            BigDecimal discount,
+            BigDecimal shipping,
+            BigDecimal tax,
+            BigDecimal total
+    ) {}
+
+    private PricingDetails calculatePricing(User user, Long shippingAddressId, String couponCode) {
         Cart cart = cartService.entity(user);
         if (cart.getItems().isEmpty()) throw new BadRequestException("Your cart is empty.");
 
-        Address address = addresses.findByIdAndUserId(request.shippingAddressId(), user.getId())
+        Address address = addresses.findByIdAndUserId(shippingAddressId, user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Selected shipping address was not found."));
 
         Map<Long, Integer> totalProductQuantities = new HashMap<>();
@@ -82,12 +103,12 @@ public class OrderService {
 
         Coupon coupon = null;
         BigDecimal discount = BigDecimal.ZERO;
-        if (request.couponCode() != null && !request.couponCode().isBlank()) {
-            String code = request.couponCode().trim();
+        if (couponCode != null && !couponCode.isBlank()) {
+            String code = couponCode.trim();
             var couponOpt = coupons.findByCodeIgnoreCase(code);
             if (couponOpt.isPresent()) {
                 coupon = couponOpt.get();
-                if (!coupon.availableAt(java.time.Instant.now()) || subtotal.compareTo(coupon.getMinimumOrderAmount()) < 0)
+                if (!coupon.availableAt(Instant.now()) || subtotal.compareTo(coupon.getMinimumOrderAmount()) < 0)
                     throw new InvalidCouponException("Coupon is expired, unavailable, or does not meet the minimum order amount.");
                 discount = calculateDiscount(coupon, subtotal);
             } else {
@@ -115,22 +136,33 @@ public class OrderService {
         BigDecimal tax = taxable.multiply(taxRate).setScale(2, RoundingMode.HALF_UP);
         BigDecimal total = taxable.add(shipping).add(tax).setScale(2, RoundingMode.HALF_UP);
 
-        PaymentGateway.PaymentResult result = paymentGateway.charge(total, request.paymentMethod());
+        return new PricingDetails(cart, address, subtotal, coupon, discount, shipping, tax, total);
+    }
+
+    /**
+     * Standard Checkout Endpoint (Used for Cash on Delivery)
+     */
+    @Transactional
+    public OrderResponse checkout(User user, OrderRequest request) {
+        PricingDetails pricing = calculatePricing(user, request.shippingAddressId(), request.couponCode());
+
+        PaymentGateway.PaymentResult result = paymentGateway.charge(pricing.total(), request.paymentMethod());
         if (!result.successful()) {
             if (auditLogService != null) {
                 auditLogService.logEvent(AuditAction.PAYMENT_FAILURE, AuditResult.FAILURE, "PAYMENT", null,
                         "Payment failed via " + request.paymentMethod() + " for user " + user.getEmail(), null,
-                        "{\"amount\":" + total + ",\"paymentMethod\":\"" + request.paymentMethod() + "\"}");
+                        "{\"amount\":" + pricing.total() + ",\"paymentMethod\":\"" + request.paymentMethod() + "\"}");
             }
             throw new BadRequestException("Payment could not be completed via " + request.paymentMethod() + ".");
         }
 
-        Order order = new Order(nextOrderNumber(), user, address, subtotal, discount, shipping, tax, total, request.paymentMethod());
-        order.setCoupon(coupon);
-        order.setPaymentStatus(PaymentStatus.SUCCESS);
+        PaymentStatus initialPaymentStatus = request.paymentMethod().isCod() ? PaymentStatus.PENDING : PaymentStatus.SUCCESS;
+        Order order = new Order(nextOrderNumber(), user, pricing.address(), pricing.subtotal(), pricing.discount(), pricing.shipping(), pricing.tax(), pricing.total(), request.paymentMethod());
+        order.setCoupon(pricing.coupon());
+        order.setPaymentStatus(initialPaymentStatus);
         order.setOrderStatus(OrderStatus.CONFIRMED);
 
-        for (CartItem item : cart.getItems()) {
+        for (CartItem item : pricing.cart().getItems()) {
             Product product = item.getProduct();
             product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
 
@@ -153,11 +185,12 @@ public class OrderService {
             order.getItems().add(orderItem);
         }
 
-        if (coupon != null) coupon.incrementUsedCount();
+        if (pricing.coupon() != null) pricing.coupon().incrementUsedCount();
         Order saved = orders.save(order);
-        payments.save(new Payment(saved, result.transactionId(), result.gateway(), total, request.paymentMethod(), saved.getPaymentStatus()));
+        payments.save(new Payment(saved, result.transactionId(), result.gateway(), pricing.total(), request.paymentMethod(), initialPaymentStatus));
         referralService.recordQualifyingPurchase(saved);
-        cart.getItems().clear(); cart.touch();
+        pricing.cart().getItems().clear();
+        pricing.cart().touch();
         emailService.sendOrderConfirmation(user.getEmail(), saved.getOrderNumber(), saved.getTotalAmount());
 
         if (auditLogService != null) {
@@ -167,12 +200,220 @@ public class OrderService {
                     "Order created: " + saved.getOrderNumber() + " with total " + saved.getTotalAmount(), null, orderState);
 
             String paymentState = String.format("{\"orderNumber\":\"%s\",\"transactionId\":\"%s\",\"gateway\":\"%s\",\"amount\":%s,\"method\":\"%s\"}",
-                    saved.getOrderNumber(), result.transactionId(), result.gateway(), total, request.paymentMethod());
+                    saved.getOrderNumber(), result.transactionId(), result.gateway(), pricing.total(), request.paymentMethod());
             auditLogService.logEvent(AuditAction.PAYMENT_SUCCESS, AuditResult.SUCCESS, "PAYMENT", result.transactionId(),
                     "Payment charged successfully for order " + saved.getOrderNumber(), null, paymentState);
         }
 
         return OrderResponse.from(saved);
+    }
+
+    /**
+     * Phase A: Create Razorpay Order
+     */
+    @Transactional
+    public RazorpayOrderResponse createRazorpayOrder(User user, RazorpayOrderRequest request) {
+        if (request.paymentMethod() == null || !request.paymentMethod().isOnline()) {
+            throw new BadRequestException("Razorpay checkout supports only online methods (UPI, UPI_QR, NET_BANKING). For COD, use standard checkout.");
+        }
+        if (razorpayService == null) {
+            throw new BadRequestException("Razorpay payment service is not configured.");
+        }
+
+        PricingDetails pricing = calculatePricing(user, request.shippingAddressId(), request.couponCode());
+
+        // Create Pending Internal Order (Stock not deducted until payment is verified)
+        Order order = new Order(nextOrderNumber(), user, pricing.address(), pricing.subtotal(), pricing.discount(), pricing.shipping(), pricing.tax(), pricing.total(), request.paymentMethod());
+        order.setCoupon(pricing.coupon());
+        order.setPaymentStatus(PaymentStatus.PENDING);
+        order.setOrderStatus(OrderStatus.PENDING);
+
+        for (CartItem item : pricing.cart().getItems()) {
+            Product product = item.getProduct();
+            BigDecimal itemPrice = (item.getComboGroupId() != null && item.getPrice() != null)
+                    ? item.getPrice()
+                    : product.sellingPrice();
+
+            OrderItem orderItem = new OrderItem(
+                    order,
+                    product,
+                    item.getQuantity(),
+                    itemPrice,
+                    item.getCombo() != null ? item.getCombo().getId() : null,
+                    item.getComboGroupId(),
+                    item.getComboType(),
+                    item.getComboName(),
+                    item.getOriginalPrice() != null ? item.getOriginalPrice() : product.sellingPrice(),
+                    item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO
+            );
+            order.getItems().add(orderItem);
+        }
+
+        Order savedOrder = orders.save(order);
+
+        // Call Razorpay API to generate Razorpay Order ID
+        String razorpayOrderId = razorpayService.createRazorpayOrder(savedOrder);
+
+        // Record initial payment entity
+        String internalTxn = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+        Payment payment = new Payment(savedOrder, internalTxn, "RAZORPAY", pricing.total(), request.paymentMethod(), PaymentStatus.PENDING);
+        payment.setRazorpayOrderId(razorpayOrderId);
+        payments.save(payment);
+
+        long amountInPaise = pricing.total().multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).longValue();
+        String customerName = (user.getFirstName() != null ? user.getFirstName() : "") + " " + (user.getLastName() != null ? user.getLastName() : "");
+
+        if (auditLogService != null) {
+            auditLogService.logEvent(AuditAction.ORDER_CREATE, AuditResult.SUCCESS, "ORDER", String.valueOf(savedOrder.getId()),
+                    "Pending order initiated for Razorpay checkout: " + savedOrder.getOrderNumber() + " with total " + savedOrder.getTotalAmount(), null,
+                    "{\"orderNumber\":\"" + savedOrder.getOrderNumber() + "\",\"razorpayOrderId\":\"" + razorpayOrderId + "\"}");
+        }
+
+        return new RazorpayOrderResponse(
+                savedOrder.getId(),
+                savedOrder.getOrderNumber(),
+                razorpayOrderId,
+                pricing.total(),
+                amountInPaise,
+                payment.getCurrency(),
+                razorpayService.getProperties().getKeyId(),
+                customerName.trim(),
+                user.getEmail(),
+                pricing.address().getPhoneNumber(),
+                razorpayService.getProperties().getCompanyName(),
+                razorpayService.getProperties().getThemeColor(),
+                request.paymentMethod()
+        );
+    }
+
+    /**
+     * Dynamic UPI QR Generation
+     */
+    @Transactional
+    public RazorpayQrResponse createRazorpayQrCode(User user, RazorpayQrRequest request) {
+        RazorpayOrderRequest orderReq = new RazorpayOrderRequest(request.shippingAddressId(), PaymentMethod.UPI_QR, request.couponCode());
+        RazorpayOrderResponse orderResp = createRazorpayOrder(user, orderReq);
+        Order order = orders.findById(orderResp.orderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+
+        return razorpayService.createDynamicQrCode(order, orderResp.razorpayOrderId());
+    }
+
+    /**
+     * Phase B: Verify Razorpay Payment Signature and Finalize Order
+     */
+    public RazorpayVerifyResponse verifyRazorpayPayment(User user, RazorpayVerifyRequest request) {
+        Order order = orders.findById(request.orderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + request.orderId()));
+
+        // IDOR protection: Verify order belongs to the authenticated user
+        if (!order.getUser().getId().equals(user.getId()) && user.getRole() != Role.ADMIN && user.getRole() != Role.STAFF) {
+            throw new UnauthorizedException("You are not authorized to verify payment for this order.");
+        }
+
+        Payment payment = payments.findByOrderId(order.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Payment record not found for order: " + order.getOrderNumber()));
+
+        // Idempotency: If already confirmed and success, return previous confirmation
+        if (order.getOrderStatus() == OrderStatus.CONFIRMED && payment.getPaymentStatus() == PaymentStatus.SUCCESS) {
+            return new RazorpayVerifyResponse(
+                    order.getId(),
+                    order.getOrderNumber(),
+                    payment.getPaymentStatus(),
+                    payment.getTransactionId(),
+                    payment.getRazorpayPaymentId(),
+                    payment.getAmount(),
+                    "Payment already verified and order confirmed."
+            );
+        }
+
+        // 1. Verify HMAC SHA-256 signature
+        boolean validSignature = RazorpaySignatureUtil.verifyPaymentSignature(
+                request.razorpayOrderId(), request.razorpayPaymentId(), request.razorpaySignature(), razorpayService.getProperties().getKeySecret()
+        );
+        if (!validSignature) {
+            payment.setFailureCode("INVALID_SIGNATURE");
+            payment.setFailureReason("Razorpay HMAC SHA-256 signature verification failed.");
+            payment.setPaymentStatus(PaymentStatus.FAILED);
+            payments.save(payment);
+            throw new BadRequestException("Payment verification failed: Invalid Razorpay signature.");
+        }
+
+        // 2. Perform live gateway verification checks (reject cards, check amount)
+        razorpayService.verifyPaymentSignatureAndDetails(payment, request.razorpayOrderId(), request.razorpayPaymentId(), request.razorpaySignature());
+
+        // 3. Atomically finalize order, deduct inventory, and clear cart
+        return finalizeSuccessfulOrder(order, payment, request.razorpayPaymentId(), request.razorpaySignature(), user);
+    }
+
+    @Transactional
+    public RazorpayVerifyResponse finalizeSuccessfulOrder(Order order, Payment payment, String razorpayPaymentId, String razorpaySignature, User user) {
+        payment.setRazorpayPaymentId(razorpayPaymentId);
+        payment.setRazorpaySignature(razorpaySignature);
+        payment.setPaymentStatus(PaymentStatus.SUCCESS);
+        payment.setPaidAt(Instant.now());
+        payments.save(payment);
+
+        order.setOrderStatus(OrderStatus.CONFIRMED);
+        order.setPaymentStatus(PaymentStatus.SUCCESS);
+
+        // Deduct inventory
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProduct();
+            if (product != null) {
+                product.setStockQuantity(Math.max(0, product.getStockQuantity() - item.getQuantity()));
+                products.save(product);
+            }
+        }
+
+        if (order.getCoupon() != null) {
+            order.getCoupon().incrementUsedCount();
+        }
+
+        Order saved = orders.save(order);
+        referralService.recordQualifyingPurchase(saved);
+
+        // Clear customer cart
+        Cart cart = cartService.entity(user);
+        cart.getItems().clear();
+        cart.touch();
+
+        emailService.sendOrderConfirmation(user.getEmail(), saved.getOrderNumber(), saved.getTotalAmount());
+
+        if (auditLogService != null) {
+            String paymentState = String.format("{\"orderNumber\":\"%s\",\"transactionId\":\"%s\",\"razorpayPaymentId\":\"%s\",\"amount\":%s}",
+                    saved.getOrderNumber(), payment.getTransactionId(), razorpayPaymentId, payment.getAmount());
+            auditLogService.logEvent(AuditAction.PAYMENT_SUCCESS, AuditResult.SUCCESS, "PAYMENT", razorpayPaymentId,
+                    "Razorpay payment verified and order confirmed: " + saved.getOrderNumber(), null, paymentState);
+        }
+
+        return new RazorpayVerifyResponse(
+                saved.getId(),
+                saved.getOrderNumber(),
+                payment.getPaymentStatus(),
+                payment.getTransactionId(),
+                payment.getRazorpayPaymentId(),
+                payment.getAmount(),
+                "Payment verified successfully. Order confirmed."
+        );
+    }
+
+    /**
+     * Get Payment Status for an Order
+     */
+    @Transactional(readOnly = true)
+    public PaymentStatusResponse getPaymentStatus(User user, Long orderId) {
+        Order order = orders.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with ID: " + orderId));
+
+        if (!order.getUser().getId().equals(user.getId()) && user.getRole() != Role.ADMIN && user.getRole() != Role.STAFF) {
+            throw new UnauthorizedException("You are not authorized to view payment details for this order.");
+        }
+
+        Payment payment = payments.findByOrderId(order.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("No payment found for order: " + order.getOrderNumber()));
+
+        return PaymentStatusResponse.from(payment);
     }
 
     @Transactional(readOnly = true)

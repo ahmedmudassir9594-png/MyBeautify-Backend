@@ -262,7 +262,7 @@ class AuditLoggingServiceIntegrationTest {
         cartService.add(user, new com.cosmetics.ecommerce.dto.CartDtos.CartItemRequest(product.getId(), 2));
 
         // Checkout
-        OrderResponse orderResp = orderService.checkout(user, new OrderRequest(addrResp.id(), PaymentMethod.MOCK, null));
+        OrderResponse orderResp = orderService.checkout(user, new OrderRequest(addrResp.id(), PaymentMethod.CASH_ON_DELIVERY, null));
 
         List<AuditLog> orderCreateLogs = auditLogRepository.findAll().stream()
                 .filter(l -> l.getAction() == AuditAction.ORDER_CREATE && String.valueOf(orderResp.id()).equals(l.getResourceId()))

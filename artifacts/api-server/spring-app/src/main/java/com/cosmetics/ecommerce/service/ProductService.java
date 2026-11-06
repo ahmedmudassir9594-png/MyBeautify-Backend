@@ -7,6 +7,7 @@ import com.cosmetics.ecommerce.enums.AuditAction;
 import com.cosmetics.ecommerce.enums.AuditResult;
 import com.cosmetics.ecommerce.exception.*;
 import com.cosmetics.ecommerce.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,26 +23,41 @@ public class ProductService {
     private final CategoryRepository categories;
     private final AuditLogService auditLogService;
     private final FileStorageService fileStorageService;
+    private final SimilarProductService similarProductService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ProductService(ProductRepository products, CategoryRepository categories,
                           AuditLogService auditLogService,
-                          FileStorageService fileStorageService) {
+                          FileStorageService fileStorageService,
+                          @Autowired(required = false) SimilarProductService similarProductService) {
         this.products = products;
         this.categories = categories;
         this.auditLogService = auditLogService;
         this.fileStorageService = fileStorageService;
+        this.similarProductService = similarProductService;
+    }
+
+    public ProductService(ProductRepository products, CategoryRepository categories,
+                          AuditLogService auditLogService,
+                          FileStorageService fileStorageService) {
+        this(products, categories, auditLogService, fileStorageService, null);
     }
 
     public ProductService(ProductRepository products, CategoryRepository categories,
                           AuditLogService auditLogService) {
-        this(products, categories, auditLogService, null);
+        this(products, categories, auditLogService, null, null);
     }
 
     public PageResponse<ProductResponse> list(String query, Long categoryId, Boolean featured,
                                                java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
+        return list(query, categoryId, null, featured, minPrice, maxPrice, pageable);
+    }
+
+    public PageResponse<ProductResponse> list(String query, Long categoryId, Long subcategoryId, Boolean featured,
+                                               java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
         Page<Product> page;
         if (query != null && !query.isBlank()) page = products.search(query.trim(), pageable);
+        else if (subcategoryId != null) page = products.findBySubcategoryIdAndActiveTrue(subcategoryId, pageable);
         else if (categoryId != null) page = products.findByCategoryIdAndActiveTrue(categoryId, pageable);
         else if (Boolean.TRUE.equals(featured)) page = products.findByFeaturedTrueAndActiveTrue(pageable);
         else if (minPrice != null && maxPrice != null) page = products.findByPriceBetween(minPrice, maxPrice, pageable);
@@ -49,8 +65,15 @@ public class ProductService {
         return PageResponse.from(page.map(this::response));
     }
 
-    public ProductResponse get(Long id) { return response(products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."))); }
-    public ProductResponse getBySlug(String slug) { return response(products.findBySlug(slug).orElseThrow(() -> new ResourceNotFoundException("Product not found."))); }
+    public ProductResponse get(Long id) {
+        Product p = products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+        return responseWithSimilar(p);
+    }
+
+    public ProductResponse getBySlug(String slug) {
+        Product p = products.findBySlug(slug).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+        return responseWithSimilar(p);
+    }
 
     @Transactional
     public ProductResponse create(ProductRequest request) {
@@ -183,6 +206,26 @@ public class ProductService {
     public ProductResponse response(Product p) {
         Double rating = products.averageRating(p.getId());
         return ProductResponse.from(p, rating == null ? 0d : rating);
+    }
+
+    public ProductResponse responseWithSimilar(Product p) {
+        Double rating = products.averageRating(p.getId());
+        java.util.List<ProductResponse> similarList = java.util.Collections.emptyList();
+        if (similarProductService != null) {
+            try {
+                similarList = similarProductService.findTopSimilarProducts(p.getId(), 4).stream()
+                        .map(sp -> new ProductResponse(
+                                sp.id(), sp.name(), sp.slug(), sp.sku(), sp.description(), sp.shortDescription(),
+                                sp.price(), sp.discountPrice(), sp.sellingPrice(), sp.stockQuantity(),
+                                sp.lowStockThreshold(), sp.categoryId(), sp.categoryName(), sp.imageUrl(),
+                                sp.active(), sp.featured(), null, null, null, sp.skinType(), sp.shade(),
+                                sp.size(), sp.expiryDate(), sp.averageRating(), sp.brandId(), sp.brandName(),
+                                sp.relationshipType(), java.util.Collections.emptyList()
+                        ))
+                        .toList();
+            } catch (Exception ignored) {}
+        }
+        return ProductResponse.from(p, rating == null ? 0d : rating, similarList);
     }
 
     public java.util.List<ProductResponse> inventory(boolean outOfStock) {

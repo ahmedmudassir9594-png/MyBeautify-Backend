@@ -30,5 +30,7 @@ public interface ComboRepository extends JpaRepository<Combo, Long> {
     List<Combo> findFeaturedActiveAndValid(@Param("now") Instant now);
 
     Page<Combo> findByNameContainingIgnoreCase(String query, Pageable pageable);
+
+    long countByImageFileName(String imageFileName);
 }
 

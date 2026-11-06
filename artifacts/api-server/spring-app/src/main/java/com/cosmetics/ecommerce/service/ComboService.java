@@ -4,6 +4,7 @@ import com.cosmetics.ecommerce.dto.CartDtos.CartResponse;
 import com.cosmetics.ecommerce.dto.CatalogDtos.ProductResponse;
 import com.cosmetics.ecommerce.dto.ComboDtos.*;
 import com.cosmetics.ecommerce.dto.PageResponse;
+import com.cosmetics.ecommerce.dto.StoredFile;
 import com.cosmetics.ecommerce.entity.*;
 import com.cosmetics.ecommerce.enums.AuditAction;
 import com.cosmetics.ecommerce.enums.AuditResult;
@@ -13,11 +14,14 @@ import com.cosmetics.ecommerce.exception.DuplicateResourceException;
 import com.cosmetics.ecommerce.exception.InsufficientStockException;
 import com.cosmetics.ecommerce.exception.ResourceNotFoundException;
 import com.cosmetics.ecommerce.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -29,6 +33,8 @@ import java.util.*;
 @Transactional
 public class ComboService {
 
+    private static final Logger log = LoggerFactory.getLogger(ComboService.class);
+
     private final ComboRepository comboRepository;
     private final ComboItemRepository comboItemRepository;
     private final ComboDiscountRuleRepository ruleRepository;
@@ -37,6 +43,8 @@ public class ComboService {
     private final CartItemRepository cartItemRepository;
     private final ComboPricingService pricingService;
     private final AuditLogService auditLogService;
+    private final FileStorageService fileStorageService;
+    private final CategoryRepository categoryRepository;
 
     @Autowired
     public ComboService(ComboRepository comboRepository,
@@ -46,7 +54,9 @@ public class ComboService {
                         CartRepository cartRepository,
                         CartItemRepository cartItemRepository,
                         ComboPricingService pricingService,
-                        @Autowired(required = false) AuditLogService auditLogService) {
+                        @Autowired(required = false) AuditLogService auditLogService,
+                        @Autowired(required = false) FileStorageService fileStorageService,
+                        @Autowired(required = false) CategoryRepository categoryRepository) {
         this.comboRepository = comboRepository;
         this.comboItemRepository = comboItemRepository;
         this.ruleRepository = ruleRepository;
@@ -55,6 +65,8 @@ public class ComboService {
         this.cartItemRepository = cartItemRepository;
         this.pricingService = pricingService;
         this.auditLogService = auditLogService;
+        this.fileStorageService = fileStorageService;
+        this.categoryRepository = categoryRepository;
     }
 
     // --- Public Customer Facing APIs ---
@@ -311,7 +323,7 @@ public class ComboService {
         }
 
         Combo combo = new Combo(trimmedName, slug, request.description(), request.sellingPrice());
-        combo.setImageUrl(request.imageUrl());
+        combo.setImageFileName(sanitizeFileName(request.imageFileName()));
         combo.setStartDate(request.startDate());
         combo.setEndDate(request.endDate());
         combo.setActive(request.active());
@@ -337,6 +349,33 @@ public class ComboService {
         return ComboResponse.from(saved);
     }
 
+    public ComboResponse createComboWithMultipart(ComboRequest request, MultipartFile file) {
+        String imageFileName = sanitizeFileName(request.imageFileName());
+        if (file != null && !file.isEmpty()) {
+            if (fileStorageService == null) {
+                throw new IllegalStateException("File storage service is not available.");
+            }
+            StoredFile stored = fileStorageService.storeFile(file);
+            imageFileName = stored.fileName();
+        }
+
+        ComboRequest updatedRequest = new ComboRequest(
+                request.name(),
+                request.slug(),
+                request.description(),
+                imageFileName,
+                request.sellingPrice(),
+                request.originalPrice(),
+                request.startDate(),
+                request.endDate(),
+                request.active(),
+                request.featured(),
+                request.items()
+        );
+
+        return createCombo(updatedRequest);
+    }
+
     public ComboResponse updateCombo(Long id, ComboRequest request) {
         Combo combo = comboRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Combo not found with id: " + id));
@@ -357,10 +396,13 @@ public class ComboService {
         String prevState = String.format("{\"id\":%d,\"name\":\"%s\",\"sellingPrice\":%s,\"active\":%s}",
                 combo.getId(), combo.getName(), combo.getSellingPrice(), combo.isActive());
 
+        String oldImageFileName = combo.getImageFileName();
+        String newImageFileName = request.imageFileName() != null ? sanitizeFileName(request.imageFileName()) : oldImageFileName;
+
         combo.setName(trimmedName);
         combo.setSlug(slug);
         combo.setDescription(request.description());
-        combo.setImageUrl(request.imageUrl());
+        combo.setImageFileName(newImageFileName);
         combo.setSellingPrice(request.sellingPrice());
         combo.setStartDate(request.startDate());
         combo.setEndDate(request.endDate());
@@ -378,13 +420,84 @@ public class ComboService {
             combo.recalculatePricing();
         }
 
-        Combo saved = comboRepository.save(combo);
+        Combo saved = comboRepository.saveAndFlush(combo);
+
+        if (oldImageFileName != null && !oldImageFileName.equals(saved.getImageFileName())) {
+            cleanupImageIfOrphaned(oldImageFileName);
+        }
 
         if (auditLogService != null) {
             String newState = String.format("{\"id\":%d,\"name\":\"%s\",\"sellingPrice\":%s,\"active\":%s}",
                     saved.getId(), saved.getName(), saved.getSellingPrice(), saved.isActive());
             auditLogService.logEvent(AuditAction.COMBO_UPDATE, AuditResult.SUCCESS, "COMBO",
                     String.valueOf(saved.getId()), "Combo updated: " + saved.getName(), prevState, newState);
+        }
+
+        return ComboResponse.from(saved);
+    }
+
+    public ComboResponse updateComboWithMultipart(Long id, ComboRequest request, MultipartFile file) {
+        Combo combo = comboRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Combo not found with id: " + id));
+
+        String oldImageFileName = combo.getImageFileName();
+        String newImageFileName;
+
+        if (file != null && !file.isEmpty()) {
+            if (fileStorageService == null) {
+                throw new IllegalStateException("File storage service is not available.");
+            }
+            StoredFile stored = fileStorageService.storeFile(file);
+            newImageFileName = stored.fileName();
+        } else if (request.imageFileName() != null && !request.imageFileName().isBlank()) {
+            newImageFileName = sanitizeFileName(request.imageFileName());
+        } else {
+            // Retain existing image when no new file or filename is provided
+            newImageFileName = oldImageFileName;
+        }
+
+        ComboRequest updatedRequest = new ComboRequest(
+                request.name(),
+                request.slug(),
+                request.description(),
+                newImageFileName,
+                request.sellingPrice(),
+                request.originalPrice(),
+                request.startDate(),
+                request.endDate(),
+                request.active(),
+                request.featured(),
+                request.items()
+        );
+
+        return updateCombo(id, updatedRequest);
+    }
+
+    public ComboResponse updateComboImage(Long id, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Uploaded file cannot be empty.");
+        }
+        if (fileStorageService == null) {
+            throw new IllegalStateException("File storage service is not available.");
+        }
+
+        Combo combo = comboRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Combo not found with id: " + id));
+
+        String oldImageFileName = combo.getImageFileName();
+        StoredFile stored = fileStorageService.storeFile(file);
+        combo.setImageFileName(stored.fileName());
+
+        Combo saved = comboRepository.saveAndFlush(combo);
+
+        if (oldImageFileName != null && !oldImageFileName.equals(saved.getImageFileName())) {
+            cleanupImageIfOrphaned(oldImageFileName);
+        }
+
+        if (auditLogService != null) {
+            auditLogService.logEvent(AuditAction.COMBO_UPDATE, AuditResult.SUCCESS, "COMBO",
+                    String.valueOf(saved.getId()), "Combo image updated: " + saved.getName(),
+                    oldImageFileName, saved.getImageFileName());
         }
 
         return ComboResponse.from(saved);
@@ -411,12 +524,19 @@ public class ComboService {
         Combo combo = comboRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Combo not found with id: " + id));
 
+        String oldImageFileName = combo.getImageFileName();
         String state = String.format("{\"id\":%d,\"name\":\"%s\"}", combo.getId(), combo.getName());
+
         comboRepository.delete(combo);
+        comboRepository.flush();
 
         if (auditLogService != null) {
             auditLogService.logEvent(AuditAction.COMBO_DELETE, AuditResult.SUCCESS, "COMBO",
                     String.valueOf(id), "Combo deleted: " + combo.getName(), state, null);
+        }
+
+        if (oldImageFileName != null) {
+            cleanupImageIfOrphaned(oldImageFileName);
         }
     }
 
@@ -512,6 +632,54 @@ public class ComboService {
             slug = base + "-" + suffix++;
         }
         return slug;
+    }
+
+    private void cleanupImageIfOrphaned(String imageFileName) {
+        if (fileStorageService == null || imageFileName == null || imageFileName.isBlank()) {
+            return;
+        }
+        String cleanName = sanitizeFileName(imageFileName);
+        if (cleanName == null || cleanName.isBlank()) {
+            return;
+        }
+
+        // Check if any other combo references this imageFileName
+        long comboCount = comboRepository.countByImageFileName(cleanName);
+        if (comboCount > 0) {
+            return;
+        }
+        if (!cleanName.equals(imageFileName) && comboRepository.countByImageFileName(imageFileName) > 0) {
+            return;
+        }
+
+        // Also check if any product or category references this image (as URL or relative URL)
+        String relativeUrl = "/api/uploads/" + cleanName;
+        long productCount = productRepository.countByImageUrl(relativeUrl);
+        long categoryCount = (categoryRepository != null) ? categoryRepository.countByImageUrl(relativeUrl) : 0;
+        if (productCount > 0 || categoryCount > 0) {
+            return;
+        }
+
+        String deletePath = "/uploads/" + cleanName;
+        if (fileStorageService.isLocalUpload(deletePath)) {
+            fileStorageService.deleteFileIfExists(deletePath);
+        }
+    }
+
+    private String sanitizeFileName(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String s = raw.trim();
+        int lastSlash = s.lastIndexOf('/');
+        if (lastSlash != -1) {
+            s = s.substring(lastSlash + 1);
+        }
+        int lastBackslash = s.lastIndexOf('\\');
+        if (lastBackslash != -1) {
+            s = s.substring(lastBackslash + 1);
+        }
+        return s.trim();
     }
 }
 

@@ -24,6 +24,9 @@ public class Product {
     @Column(nullable = false) private int stockQuantity;
     @Column(nullable = false) private int lowStockThreshold = 5;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) private Category category;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subcategory_id")
+    private Subcategory subcategory;
     private String imageUrl;
     @Column(nullable = false) private boolean active = true;
     @Column(nullable = false) private boolean featured;
@@ -52,6 +55,8 @@ public class Product {
     public int getStockQuantity() { return stockQuantity; }
     public int getLowStockThreshold() { return lowStockThreshold; }
     public Category getCategory() { return category; }
+    public Subcategory getSubcategory() { return subcategory; }
+    public void setSubcategory(Subcategory value) { subcategory = value; }
     public String getImageUrl() { return imageUrl; }
     public boolean isActive() { return active; }
     public boolean isFeatured() { return featured; }

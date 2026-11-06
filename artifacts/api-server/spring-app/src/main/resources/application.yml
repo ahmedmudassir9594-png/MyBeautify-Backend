@@ -14,6 +14,13 @@ app:
     upload-dir: ${UPLOAD_DIR:uploads}
     max-file-size-bytes: ${MAX_FILE_SIZE:5242880}
     base-url: ${STORAGE_BASE_URL:}
+  razorpay:
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+    currency: ${RAZORPAY_CURRENCY:INR}
+    company-name: ${RAZORPAY_COMPANY_NAME:MALKAZ Luxury Jewellery}
+    theme-color: ${RAZORPAY_THEME_COLOR:#0A3B2C}
 
 server:
   port: ${PORT:8080}
@@ -41,6 +48,13 @@ spring:
     password: ${DB_PASSWORD:mecaps}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    baseline-description: "Initial TiDB Schema"
+    locations: classpath:db/migration 
+
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:none}
@@ -59,8 +73,8 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:ahmedmudassir9594@gmail.com}
-    password: ${MAIL_PASSWORD:vcyp qtwk swep mxqj}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
