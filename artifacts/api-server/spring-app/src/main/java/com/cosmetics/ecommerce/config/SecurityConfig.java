@@ -20,6 +20,7 @@ import org.springframework.web.cors.*;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.PrintWriter;
+import java.time.Instant;
 import java.util.Arrays;
 
 @Configuration
@@ -30,7 +31,7 @@ public class SecurityConfig {
     private final ObjectProvider<AuditLogService> auditLogServiceProvider;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          @Value("${app.cors.allowed-origins:${CORS_ALLOWED_ORIGINS:https://malkaz.vercel.app,http://localhost:5173,http://localhost:3000}}") String allowedOrigins,
+                          @Value("${app.cors.allowed-origins:${CORS_ALLOWED_ORIGINS:https://www.fashionmalkaz.com,https://fashionmalkaz.com,https://malkaz.vercel.app,http://localhost:5173,http://localhost:3000}}") String allowedOrigins,
                           ObjectProvider<AuditLogService> auditLogServiceProvider) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.allowedOrigins = allowedOrigins;
@@ -43,27 +44,44 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // 1. Preflight CORS
                         .requestMatchers(org.springframework.web.cors.CorsUtils::isPreFlightRequest).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // 2. Health & Webhooks
+                        .requestMatchers("/healthz", "/actuator/health").permitAll()
+                        .requestMatchers("/payments/razorpay/webhook").permitAll()
+                        .requestMatchers("/referrals/validate").permitAll()
+
+                        // 3. Public Auth Routes
+                        .requestMatchers("/auth/**").permitAll()
+
+                        // 4. API Docs / Swagger
                         .requestMatchers(
-                                "/healthz",
-                                "/auth/register",
-                                "/auth/login",
-                                "/auth/google",
-                                "/auth/refresh-token",
-                                "/auth/forgot-password",
-                                "/auth/reset-password",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/v3/api-docs/**",
-                                "/referrals/validate",
-                                "/payments/razorpay/webhook"
+                                "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/categoriesASC/**", "/subcategories/**", "/uploads/**", "/combos/**").permitAll()
+
+                        // 5. Public Catalog (Both bare paths and subpaths included)
+                        .requestMatchers(HttpMethod.GET,
+                                "/products", "/products/**",
+                                "/categories", "/categories/**",
+                                "/categoriesASC", "/categoriesASC/**",
+                                "/subcategories", "/subcategories/**",
+                                "/combos", "/combos/**",
+                                "/uploads/**"
+                        ).permitAll()
+
+                        // 6. Public Combo Preview
                         .requestMatchers(HttpMethod.POST, "/combos/custom/preview").permitAll()
+
+                        // 7. Role Protected Endpoints
                         .requestMatchers("/admin/payments/*/refund").hasRole("ADMIN")
                         .requestMatchers("/admin/audit-logs/**").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasAnyRole("ADMIN", "STAFF")
+
+                        // 8. Remaining Routes Authenticated
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) -> {
@@ -77,7 +95,7 @@ public class SecurityConfig {
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             try (PrintWriter writer = response.getWriter()) {
-                                writer.write("{\"success\":false,\"message\":\"Full authentication is required to access this resource.\",\"status\":401,\"timestamp\":\"" + java.time.Instant.now() + "\"}");
+                                writer.write("{\"success\":false,\"message\":\"Full authentication is required to access this resource.\",\"status\":401,\"timestamp\":\"" + Instant.now() + "\"}");
                             }
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
@@ -91,14 +109,17 @@ public class SecurityConfig {
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             try (PrintWriter writer = response.getWriter()) {
-                                writer.write("{\"success\":false,\"message\":\"You do not have permission to perform this action.\",\"status\":403,\"timestamp\":\"" + java.time.Instant.now() + "\"}");
+                                writer.write("{\"success\":false,\"message\":\"You do not have permission to perform this action.\",\"status\":403,\"timestamp\":\"" + Instant.now() + "\"}");
                             }
                         }))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
-    @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     org.springframework.security.core.userdetails.UserDetailsService userDetailsService(UserRepository users) {
