@@ -69,7 +69,20 @@ public final class CatalogDtos {
             String shade,
             String size,
             Instant expiryDate
-    ) {}
+    ) {
+        public ProductRequest(
+                String name, String sku, BigDecimal price, BigDecimal discountPrice,
+                int stockQuantity, int lowStockThreshold, Long categoryId,
+                String description, String shortDescription, String imageUrl,
+                Boolean active, Boolean featured, String ingredients, String benefits,
+                String howToUse, String skinType, String shade, String size, Instant expiryDate
+        ) {
+            this(name, sku, price, discountPrice, stockQuantity, lowStockThreshold, categoryId,
+                    description, shortDescription, imageUrl,
+                    imageUrl != null ? List.of(imageUrl) : Collections.emptyList(),
+                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate);
+        }
+    }
 
     public record ProductResponse(
             Long id,
