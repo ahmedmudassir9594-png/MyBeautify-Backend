@@ -1,12 +1,14 @@
 package com.cosmetics.ecommerce.dto;
 
 import com.cosmetics.ecommerce.entity.Product;
+import com.cosmetics.ecommerce.entity.ProductImage;
 import com.cosmetics.ecommerce.entity.ProductRelationship;
 import com.cosmetics.ecommerce.enums.RelationshipType;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public final class ProductRelationshipDtos {
 
@@ -74,6 +76,7 @@ public final class ProductRelationshipDtos {
             Long categoryId,
             String categoryName,
             String imageUrl,
+            List<String> images,
             boolean active,
             boolean featured,
             boolean inStock,
@@ -87,6 +90,11 @@ public final class ProductRelationshipDtos {
     ) {
         public static SimilarProductResponse from(Product p, double rating, String relationshipType, int displayOrder) {
             boolean inStock = p.isActive() && p.getStockQuantity() > 0;
+
+            List<String> galleryImages = (p.getImages() != null && !p.getImages().isEmpty())
+                    ? p.getImages().stream().map(ProductImage::getImageUrl).toList()
+                    : (p.getImageUrl() != null ? List.of(p.getImageUrl()) : List.of());
+
             return new SimilarProductResponse(
                     p.getId(),
                     p.getName(),
@@ -104,6 +112,7 @@ public final class ProductRelationshipDtos {
                     p.getCategory() != null ? p.getCategory().getId() : null,
                     p.getCategory() != null ? p.getCategory().getName() : "Fine Jewellery",
                     p.getImageUrl(),
+                    galleryImages,
                     p.isActive(),
                     p.isFeatured(),
                     inStock,
@@ -118,4 +127,3 @@ public final class ProductRelationshipDtos {
         }
     }
 }
-

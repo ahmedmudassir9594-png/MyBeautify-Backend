@@ -1,6 +1,8 @@
 package com.cosmetics.ecommerce.controller;
 
 import com.cosmetics.ecommerce.dto.*;
+import java.util.ArrayList;
+import java.util.List;
 import com.cosmetics.ecommerce.dto.CatalogDtos.*;
 import com.cosmetics.ecommerce.dto.ProductRelationshipDtos.*;
 import com.cosmetics.ecommerce.enums.RelationshipType;
@@ -194,21 +196,39 @@ public class ProductController {
             @RequestParam(value = "size", required = false) String size,
             @RequestParam(value = "expiryDate", required = false) Instant expiryDate,
             @RequestPart(value = "image", required = false) MultipartFile image,
-            @RequestPart(value = "file", required = false) MultipartFile file) {
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @RequestPart(value = "files", required = false) MultipartFile[] files) {
+
+        List<String> uploadedUrls = new ArrayList<>();
+
+        if (files != null && files.length > 0) {
+            if (fileStorageService == null) throw new IllegalStateException("File storage service is not available.");
+            for (MultipartFile f : files) {
+                if (f != null && !f.isEmpty()) {
+                    uploadedUrls.add(fileStorageService.storeFile(f).fullUrl());
+                }
+            }
+        }
 
         MultipartFile uploadFile = image != null ? image : file;
         String finalImageUrl = imageUrl;
         if (uploadFile != null && !uploadFile.isEmpty()) {
-            if (fileStorageService == null) {
-                throw new IllegalStateException("File storage service is not available.");
-            }
+            if (fileStorageService == null) throw new IllegalStateException("File storage service is not available.");
             StoredFile stored = fileStorageService.storeFile(uploadFile);
             finalImageUrl = stored.fullUrl();
+            if (uploadedUrls.isEmpty()) {
+                uploadedUrls.add(finalImageUrl);
+            }
+        }
+
+        if (finalImageUrl == null && !uploadedUrls.isEmpty()) {
+            finalImageUrl = uploadedUrls.get(0);
         }
 
         ProductRequest request = buildProductRequest(productJson, name, sku, price, discountPrice,
                 stockQuantity, lowStockThreshold, categoryId, description, shortDescription,
-                finalImageUrl, active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate);
+                finalImageUrl, uploadedUrls, active, featured, ingredients, benefits, howToUse,
+                skinType, shade, size, expiryDate);
 
         validateRequest(request);
         return ApiResponse.ok("Product created successfully.", products.create(request));
@@ -245,26 +265,63 @@ public class ProductController {
             @RequestParam(value = "size", required = false) String size,
             @RequestParam(value = "expiryDate", required = false) Instant expiryDate,
             @RequestPart(value = "image", required = false) MultipartFile image,
-            @RequestPart(value = "file", required = false) MultipartFile file) {
+            @RequestPart(value = "file", required = false) MultipartFile file,
+            @RequestPart(value = "files", required = false) MultipartFile[] files) {
+
+        List<String> uploadedUrls = new ArrayList<>();
+
+        if (files != null && files.length > 0) {
+            if (fileStorageService == null) throw new IllegalStateException("File storage service is not available.");
+            for (MultipartFile f : files) {
+                if (f != null && !f.isEmpty()) {
+                    uploadedUrls.add(fileStorageService.storeFile(f).fullUrl());
+                }
+            }
+        }
 
         MultipartFile uploadFile = image != null ? image : file;
         String finalImageUrl = imageUrl;
         if (uploadFile != null && !uploadFile.isEmpty()) {
-            if (fileStorageService == null) {
-                throw new IllegalStateException("File storage service is not available.");
-            }
+            if (fileStorageService == null) throw new IllegalStateException("File storage service is not available.");
             StoredFile stored = fileStorageService.storeFile(uploadFile);
             finalImageUrl = stored.fullUrl();
+            if (uploadedUrls.isEmpty()) {
+                uploadedUrls.add(finalImageUrl);
+            }
+        }
+
+        if (finalImageUrl == null && !uploadedUrls.isEmpty()) {
+            finalImageUrl = uploadedUrls.get(0);
         }
 
         ProductRequest request = buildProductRequest(productJson, name, sku, price, discountPrice,
                 stockQuantity, lowStockThreshold, categoryId, description, shortDescription,
-                finalImageUrl, active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate);
+                finalImageUrl, uploadedUrls, active, featured, ingredients, benefits, howToUse,
+                skinType, shade, size, expiryDate);
 
         validateRequest(request);
         return ApiResponse.ok("Product updated successfully.", products.update(id, request));
     }
 
+    // Direct multi-files upload to an existing product
+    @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<ProductResponse> uploadProductImages(
+            @PathVariable Long id,
+            @RequestParam("files") MultipartFile[] files) {
+        return ApiResponse.ok("Product images uploaded successfully.", products.uploadProductImages(id, files));
+    }
+
+    // Delete a specific image from gallery
+    @DeleteMapping("/{id}/images/{imageId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<ProductResponse> deleteProductImage(
+            @PathVariable Long id,
+            @PathVariable Long imageId) {
+        return ApiResponse.ok("Product image deleted successfully.", products.deleteProductImage(id, imageId));
+    }
+
+    // Single image update endpoint
     @PostMapping(value = "/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<ProductResponse> uploadProductImage(
@@ -310,9 +367,9 @@ public class ProductController {
     private ProductRequest buildProductRequest(
             String productJson, String name, String sku, BigDecimal price, BigDecimal discountPrice,
             Integer stockQuantity, Integer lowStockThreshold, Long categoryId,
-            String description, String shortDescription, String imageUrl, Boolean active,
-            Boolean featured, String ingredients, String benefits, String howToUse,
-            String skinType, String shade, String size, Instant expiryDate) {
+            String description, String shortDescription, String imageUrl, List<String> images,
+            Boolean active, Boolean featured, String ingredients, String benefits,
+            String howToUse, String skinType, String shade, String size, Instant expiryDate) {
 
         if (productJson != null && !productJson.isBlank()) {
             try {
@@ -322,6 +379,7 @@ public class ProductController {
                         p.stockQuantity(), p.lowStockThreshold(), p.categoryId(),
                         p.description(), p.shortDescription(),
                         imageUrl != null ? imageUrl : p.imageUrl(),
+                        images != null && !images.isEmpty() ? images : p.images(),
                         p.active(), p.featured(), p.ingredients(), p.benefits(),
                         p.howToUse(), p.skinType(), p.shade(), p.size(), p.expiryDate()
                 );
@@ -335,7 +393,7 @@ public class ProductController {
                 stockQuantity != null ? stockQuantity : 0,
                 lowStockThreshold != null ? lowStockThreshold : 5,
                 categoryId, description, shortDescription,
-                imageUrl, active != null ? active : true,
+                imageUrl, images, active != null ? active : true,
                 Boolean.TRUE.equals(featured),
                 ingredients, benefits, howToUse, skinType, shade, size, expiryDate
         );

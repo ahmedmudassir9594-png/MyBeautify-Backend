@@ -49,12 +49,12 @@ public class ProductService {
     }
 
     public PageResponse<ProductResponse> list(String query, Long categoryId, Boolean featured,
-                                               java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
+                                              java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
         return list(query, categoryId, null, featured, minPrice, maxPrice, pageable);
     }
 
     public PageResponse<ProductResponse> list(String query, Long categoryId, Long subcategoryId, Boolean featured,
-                                               java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
+                                              java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
         Page<Product> page;
         if (query != null && !query.isBlank()) page = products.search(query.trim(), pageable);
         else if (subcategoryId != null) page = products.findBySubcategoryIdAndActiveTrue(subcategoryId, pageable);
@@ -73,6 +73,107 @@ public class ProductService {
     public ProductResponse getBySlug(String slug) {
         Product p = products.findBySlug(slug).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
         return responseWithSimilar(p);
+    }
+
+    @Transactional
+    public ProductResponse uploadProductImages(Long id, MultipartFile[] files) {
+        if (fileStorageService == null) {
+            throw new IllegalStateException("File storage service is not available.");
+        }
+        if (files == null || files.length == 0) {
+            throw new BadRequestException("No files uploaded.");
+        }
+
+        Product p = products.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+
+        int currentOrder = p.getImages() != null ? p.getImages().size() : 0;
+
+        for (MultipartFile file : files) {
+            if (file != null && !file.isEmpty()) {
+                StoredFile stored = fileStorageService.storeFile(file);
+                String fullUrl = stored.fullUrl();
+
+                if (p.getImageUrl() == null || p.getImageUrl().isBlank()) {
+                    p.setImageUrl(fullUrl);
+                }
+
+                p.addImage(fullUrl, currentOrder++);
+            }
+        }
+
+        Product saved = products.save(p);
+
+        if (auditLogService != null) {
+            auditLogService.logEvent(
+                    AuditAction.PRODUCT_UPDATE,
+                    AuditResult.SUCCESS,
+                    "PRODUCT",
+                    String.valueOf(saved.getId()),
+                    "Uploaded " + files.length + " gallery images for: " + saved.getName(),
+                    null,
+                    "Total images: " + (saved.getImages() != null ? saved.getImages().size() : 0)
+            );
+        }
+
+        return response(saved);
+    }
+
+    @Transactional
+    public ProductResponse updateProductImage(Long id, MultipartFile uploadFile) {
+        if (fileStorageService == null) {
+            throw new IllegalStateException("File storage service is not available.");
+        }
+        Product p = products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+        String oldImageUrl = p.getImageUrl();
+        StoredFile stored = fileStorageService.storeFile(uploadFile);
+        p.setImageUrl(stored.fullUrl());
+
+        p.clearImages();
+        p.addImage(stored.fullUrl(), 0);
+
+        Product saved = products.save(p);
+
+        if (oldImageUrl != null && !oldImageUrl.equals(saved.getImageUrl())) {
+            cleanupImageIfOrphaned(oldImageUrl);
+        }
+
+        if (auditLogService != null) {
+            auditLogService.logEvent(AuditAction.PRODUCT_UPDATE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(saved.getId()),
+                    "Product image updated: " + saved.getName(), oldImageUrl, saved.getImageUrl());
+        }
+
+        return response(saved);
+    }
+
+    @Transactional
+    public ProductResponse deleteProductImage(Long productId, Long imageId) {
+        Product p = products.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+
+        if (p.getImages() != null) {
+            p.getImages().removeIf(img -> img.getId().equals(imageId));
+            if (!p.getImages().isEmpty()) {
+                p.setImageUrl(p.getImages().get(0).getImageUrl());
+            } else {
+                p.setImageUrl(null);
+            }
+        }
+
+        return response(products.save(p));
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Product p = products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+        boolean wasActive = p.isActive();
+        p.setActive(false);
+
+        if (auditLogService != null) {
+            auditLogService.logEvent(AuditAction.PRODUCT_DELETE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(p.getId()),
+                    "Product deactivated/archived: " + p.getName(),
+                    "{\"active\":" + wasActive + "}", "{\"active\":false}");
+        }
     }
 
     @Transactional
@@ -128,42 +229,6 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductResponse updateProductImage(Long id, MultipartFile file) {
-        if (fileStorageService == null) {
-            throw new IllegalStateException("File storage service is not available.");
-        }
-        Product p = products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
-        String oldImageUrl = p.getImageUrl();
-        StoredFile stored = fileStorageService.storeFile(file);
-        p.setImageUrl(stored.fullUrl());
-        Product saved = products.save(p);
-
-        if (oldImageUrl != null && !oldImageUrl.equals(saved.getImageUrl())) {
-            cleanupImageIfOrphaned(oldImageUrl);
-        }
-
-        if (auditLogService != null) {
-            auditLogService.logEvent(AuditAction.PRODUCT_UPDATE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(saved.getId()),
-                    "Product image updated: " + saved.getName(), oldImageUrl, saved.getImageUrl());
-        }
-
-        return response(saved);
-    }
-
-    @Transactional
-    public void delete(Long id) {
-        Product p = products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
-        boolean wasActive = p.isActive();
-        p.setActive(false);
-
-        if (auditLogService != null) {
-            auditLogService.logEvent(AuditAction.PRODUCT_DELETE, AuditResult.SUCCESS, "PRODUCT", String.valueOf(p.getId()),
-                    "Product deactivated/archived: " + p.getName(),
-                    "{\"active\":" + wasActive + "}", "{\"active\":false}");
-        }
-    }
-
-    @Transactional
     public ProductResponse updateStock(Long id, int stock) {
         if (stock < 0) throw new BadRequestException("Stock cannot be negative.");
         Product p = products.findById(id).orElseThrow(() -> new ResourceNotFoundException("Product not found."));
@@ -197,10 +262,35 @@ public class ProductService {
         if (r.discountPrice() != null && r.discountPrice().compareTo(r.price()) >= 0) {
             throw new BadRequestException("Discount price must be less than regular price.");
         }
-        p.setDiscountPrice(r.discountPrice()); p.setLowStockThreshold(r.lowStockThreshold()); p.setDescription(r.description());
-        p.setShortDescription(r.shortDescription()); p.setImageUrl(r.imageUrl()); p.setActive(r.active() == null || r.active());
-        p.setFeatured(Boolean.TRUE.equals(r.featured())); p.setIngredients(r.ingredients()); p.setBenefits(r.benefits());
-        p.setHowToUse(r.howToUse()); p.setSkinType(r.skinType()); p.setShade(r.shade()); p.setSize(r.size()); p.setExpiryDate(r.expiryDate());
+        p.setDiscountPrice(r.discountPrice());
+        p.setLowStockThreshold(r.lowStockThreshold());
+        p.setDescription(r.description());
+        p.setShortDescription(r.shortDescription());
+
+        if (r.images() != null && !r.images().isEmpty()) {
+            p.setImageUrl(r.images().get(0));
+            p.clearImages();
+            for (int i = 0; i < r.images().size(); i++) {
+                String imgUrl = r.images().get(i);
+                if (imgUrl != null && !imgUrl.isBlank()) {
+                    p.addImage(imgUrl.trim(), i);
+                }
+            }
+        } else if (r.imageUrl() != null && !r.imageUrl().isBlank()) {
+            p.setImageUrl(r.imageUrl().trim());
+            p.clearImages();
+            p.addImage(r.imageUrl().trim(), 0);
+        }
+
+        p.setActive(r.active() == null || r.active());
+        p.setFeatured(Boolean.TRUE.equals(r.featured()));
+        p.setIngredients(r.ingredients());
+        p.setBenefits(r.benefits());
+        p.setHowToUse(r.howToUse());
+        p.setSkinType(r.skinType());
+        p.setShade(r.shade());
+        p.setSize(r.size());
+        p.setExpiryDate(r.expiryDate());
     }
 
     public ProductResponse response(Product p) {
@@ -218,7 +308,7 @@ public class ProductService {
                                 sp.id(), sp.name(), sp.slug(), sp.sku(), sp.description(), sp.shortDescription(),
                                 sp.price(), sp.discountPrice(), sp.sellingPrice(), sp.stockQuantity(),
                                 sp.lowStockThreshold(), sp.categoryId(), sp.categoryName(), sp.imageUrl(),
-                                sp.active(), sp.featured(), null, null, null, sp.skinType(), sp.shade(),
+                                sp.images(), sp.active(), sp.featured(), null, null, null, sp.skinType(), sp.shade(),
                                 sp.size(), sp.expiryDate(), sp.averageRating(), sp.brandId(), sp.brandName(),
                                 sp.relationshipType(), java.util.Collections.emptyList()
                         ))

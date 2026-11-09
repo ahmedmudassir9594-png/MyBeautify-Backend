@@ -1,6 +1,8 @@
 package com.cosmetics.ecommerce.entity;
 
 import jakarta.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
@@ -27,7 +29,13 @@ public class Product {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subcategory_id")
     private Subcategory subcategory;
-    private String imageUrl;
+
+    private String imageUrl; // Primary thumbnail (backwards compatibility)
+
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("displayOrder ASC")
+    private List<ProductImage> images = new ArrayList<>();
+
     @Column(nullable = false) private boolean active = true;
     @Column(nullable = false) private boolean featured;
     @Column(length = 1000) private String ingredients;
@@ -39,11 +47,14 @@ public class Product {
     private Instant expiryDate;
     @CreationTimestamp @Column(nullable = false, updatable = false) private Instant createdAt;
     @UpdateTimestamp private Instant updatedAt;
+
     protected Product() {}
+
     public Product(String name, String slug, String sku, BigDecimal price, int stockQuantity, Category category) {
         this.name = name; this.slug = slug; this.sku = sku; this.price = price; this.stockQuantity = stockQuantity;
-         this.category = category;
+        this.category = category;
     }
+
     public Long getId() { return id; }
     public String getName() { return name; }
     public String getSlug() { return slug; }
@@ -70,6 +81,24 @@ public class Product {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public BigDecimal sellingPrice() { return discountPrice != null && discountPrice.compareTo(price) < 0 ? discountPrice : price; }
+
+    public List<ProductImage> getImages() { return images; }
+    public void setImages(List<ProductImage> images) { this.images = images; }
+
+    // Helper methods for gallery management
+    public void addImage(String url, int order) {
+        if (this.images == null) {
+            this.images = new ArrayList<>();
+        }
+        this.images.add(new ProductImage(this, url, order));
+    }
+
+    public void clearImages() {
+        if (this.images != null) {
+            this.images.clear();
+        }
+    }
+
     public void setName(String value) { name = value; } public void setSlug(String value) { slug = value; }
     public void setSku(String value) { sku = value; } public void setDescription(String value) { description = value; }
     public void setShortDescription(String value) { shortDescription = value; } public void setPrice(BigDecimal value) { price = value; }
