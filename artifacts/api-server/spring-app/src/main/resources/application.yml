@@ -1,15 +1,15 @@
 app:
   jwt:
-    secret: ${JWT_SECRET:${SESSION_SECRET:a4bf05ff532862e43naem226f19619674f8d89a7d5442e426a6e2e170e731a66}}
-    access-token-minutes: ${JWT_ACCESS_MINUTES:30}
+    secret: ${JWT_SECRET}
+    access-token-minutes: ${JWT_ACCESS_MINUTES:1440}
     refresh-token-days: ${JWT_REFRESH_DAYS:14}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:https://malkaz.vercel.app,https://fashionmalkaz.com,https://www.fashionmalkaz.com,http://localhost:5173,http://localhost:3000}
-    checkout:
-      tax-rate: ${CHECKOUT_TAX_RATE:0.08}
-      shipping-flat-rate: ${CHECKOUT_SHIPPING:8.99}
-    mail:
-      enabled: ${MAIL_ENABLED:true}
+  checkout:
+    tax-rate: ${CHECKOUT_TAX_RATE:0.18}
+    shipping-flat-rate: ${CHECKOUT_SHIPPING:79.00}
+  mail:
+    enabled: ${MAIL_ENABLED:true}
   storage:
     upload-dir: ${UPLOAD_DIR:uploads}
     max-file-size-bytes: ${MAX_FILE_SIZE:5242880}
@@ -44,8 +44,8 @@ spring:
 
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/Beautify?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-    username: ${DB_USERNAME:Beautify}
-    password: ${DB_PASSWORD:mecaps}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   flyway:
@@ -53,7 +53,7 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
     baseline-description: "Initial TiDB Schema"
-    locations: classpath:db/migration 
+    locations: classpath:db/migration
 
   jpa:
     hibernate:
@@ -68,7 +68,6 @@ spring:
           use_jdbc_metadata_defaults: false
         jdbc:
           time_zone: UTC
-
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
@@ -85,8 +84,8 @@ spring:
 springdoc:
   api-docs:
     path: /v3/api-docs
-    enabled: true
+    enabled: ${SWAGGER_ENABLED:false}
   swagger-ui:
     path: /swagger-ui/index.html
-    enabled: true
-    try-it-out-enabled: true
+    enabled: ${SWAGGER_ENABLED:false}
+    try-it-out-enabled: false

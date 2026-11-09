@@ -25,7 +25,7 @@ public class ComboController {
         this.comboService = comboService;
     }
 
-    // --- Predefined Combos (Public) ---
+    // --- 1. Predefined Combos (Public Listings) ---
 
     @GetMapping
     public ApiResponse<PageResponse<ComboResponse>> list(@PageableDefault(size = 12) Pageable pageable) {
@@ -37,19 +37,15 @@ public class ComboController {
         return ApiResponse.ok("Featured combos fetched successfully.", comboService.getFeaturedCombos());
     }
 
-    @GetMapping("/{slug}")
-    public ApiResponse<ComboResponse> bySlug(@PathVariable String slug) {
-        return ApiResponse.ok("Combo fetched successfully.", comboService.getComboBySlug(slug));
-    }
-
     @GetMapping("/id/{id}")
     public ApiResponse<ComboResponse> byId(@PathVariable Long id) {
         return ApiResponse.ok("Combo fetched successfully.", comboService.getComboById(id));
     }
 
-    // --- Build Your Own Combo (Public) ---
+    // --- 2. Build Your Own Combo (Public Endpoints - Must stay above dynamic routes) ---
 
-    @GetMapping("/custom/products")
+    // Dono URL match honge: "/combos/custom/products" aur "/combos/products"
+    @GetMapping({"/custom/products", "/products"})
     public ApiResponse<PageResponse<ProductResponse>> eligibleProducts(@PageableDefault(size = 24) Pageable pageable) {
         return ApiResponse.ok("Custom combo eligible products fetched successfully.",
                 comboService.getCustomComboEligibleProducts(pageable));
@@ -62,7 +58,14 @@ public class ComboController {
                 comboService.previewCustomCombo(request));
     }
 
-    // --- Cart Additions (Authenticated) ---
+    // --- 3. Dynamic Slug Route (Hamesha static routes ke neeche) ---
+
+    @GetMapping("/{slug}")
+    public ApiResponse<ComboResponse> bySlug(@PathVariable String slug) {
+        return ApiResponse.ok("Combo fetched successfully.", comboService.getComboBySlug(slug));
+    }
+
+    // --- 4. Cart Additions (Authenticated) ---
 
     @PostMapping("/{id}/cart")
     public ApiResponse<CartResponse> addPredefinedToCart(
@@ -90,4 +93,3 @@ public class ComboController {
                 comboService.removeComboGroupFromCart(user, comboGroupId));
     }
 }
-

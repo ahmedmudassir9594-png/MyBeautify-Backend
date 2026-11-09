@@ -64,9 +64,10 @@ public class CatalogService {
     }
 
     public List<CategoryResponse> getAllCategory() {
-        List<Category> allCategories = categories.findAll(Sort.by(Sort.Direction.ASC, "id"));
+        // Sirf active categories fetch karega:
+        List<Category> allCategories = categories.findByActiveTrueOrderByNameAsc();
         Map<Long, List<SubcategoryResponse>> subcategoryMap = getActiveSubcategoryMap();
-        Map<Long, Long> countMap = getSubcategoryCountMap(false);
+        Map<Long, Long> countMap = getSubcategoryCountMap(true);
 
         return allCategories.stream().map(c -> {
             long count = countMap.getOrDefault(c.getId(), 0L);
