@@ -2,7 +2,10 @@ package com.cosmetics.ecommerce.entity;
 
 import jakarta.persistence.*;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
@@ -45,6 +48,11 @@ public class Product {
     private String shade;
     private String size;
     private Instant expiryDate;
+
+    @Convert(converter = StringMapJsonConverter.class)
+    @Column(name = "attributes_json", columnDefinition = "TEXT")
+    private Map<String, String> attributes = new LinkedHashMap<>();
+
     @CreationTimestamp @Column(nullable = false, updatable = false) private Instant createdAt;
     @UpdateTimestamp private Instant updatedAt;
 
@@ -110,4 +118,12 @@ public class Product {
     public void setHowToUse(String value) { howToUse = value; } public void setSkinType(String value) { skinType = value; }
     public void setShade(String value) { shade = value; } public void setSize(String value) { size = value; }
     public void setExpiryDate(Instant value) { expiryDate = value; }
+
+    public Map<String, String> getAttributes() {
+        return attributes != null ? attributes : Collections.emptyMap();
+    }
+
+    public void setAttributes(Map<String, String> value) {
+        this.attributes = value != null ? new LinkedHashMap<>(value) : new LinkedHashMap<>();
+    }
 }

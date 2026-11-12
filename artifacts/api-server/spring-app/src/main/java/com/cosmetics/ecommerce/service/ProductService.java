@@ -65,6 +65,46 @@ public class ProductService {
 
     public PageResponse<ProductResponse> list(String query, Long categoryId, Long subcategoryId, Boolean featured,
                                               java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice, Pageable pageable) {
+        return list(query, categoryId, subcategoryId, featured, minPrice, maxPrice, null, pageable);
+    }
+
+    public PageResponse<ProductResponse> list(String query, Long categoryId, Long subcategoryId, Boolean featured,
+                                              java.math.BigDecimal minPrice, java.math.BigDecimal maxPrice,
+                                              java.util.Map<String, String> attributeFilters,
+                                              Pageable pageable) {
+        if (attributeFilters != null && !attributeFilters.isEmpty()) {
+            java.util.List<Product> candidates;
+            if (subcategoryId != null) {
+                candidates = products.findBySubcategoryIdAndActiveTrue(subcategoryId, Pageable.unpaged()).getContent();
+            } else if (categoryId != null) {
+                candidates = products.findByCategoryIdAndActiveTrue(categoryId, Pageable.unpaged()).getContent();
+            } else {
+                candidates = products.findByActiveTrue(Pageable.unpaged()).getContent();
+            }
+
+            java.util.List<Product> filtered = candidates.stream()
+                    .filter(p -> {
+                        if (query != null && !query.isBlank()) {
+                            String q = query.toLowerCase();
+                            boolean matchesQuery = (p.getName() != null && p.getName().toLowerCase().contains(q))
+                                    || (p.getDescription() != null && p.getDescription().toLowerCase().contains(q))
+                                    || (p.getCategory() != null && p.getCategory().getName() != null && p.getCategory().getName().toLowerCase().contains(q));
+                            if (!matchesQuery) return false;
+                        }
+                        if (Boolean.TRUE.equals(featured) && !p.isFeatured()) return false;
+                        if (minPrice != null && p.getPrice().compareTo(minPrice) < 0) return false;
+                        if (maxPrice != null && p.getPrice().compareTo(maxPrice) > 0) return false;
+                        return matchesAttributes(p, attributeFilters);
+                    })
+                    .toList();
+
+            int start = (int) pageable.getOffset();
+            int end = Math.min(start + pageable.getPageSize(), filtered.size());
+            java.util.List<Product> pageContent = start >= filtered.size() ? java.util.Collections.emptyList() : filtered.subList(start, end);
+            Page<Product> page = new PageImpl<>(pageContent, pageable, filtered.size());
+            return PageResponse.from(page.map(this::response));
+        }
+
         Page<Product> page;
         if (query != null && !query.isBlank()) page = products.search(query.trim(), pageable);
         else if (subcategoryId != null) page = products.findBySubcategoryIdAndActiveTrue(subcategoryId, pageable);
@@ -73,6 +113,39 @@ public class ProductService {
         else if (minPrice != null && maxPrice != null) page = products.findByPriceBetween(minPrice, maxPrice, pageable);
         else page = products.findByActiveTrue(pageable);
         return PageResponse.from(page.map(this::response));
+    }
+
+    private boolean matchesAttributes(Product p, java.util.Map<String, String> filters) {
+        if (filters == null || filters.isEmpty()) return true;
+        java.util.Map<String, String> attrs = p.getAttributes();
+        if (attrs == null || attrs.isEmpty()) return false;
+
+        for (java.util.Map.Entry<String, String> entry : filters.entrySet()) {
+            String filterKey = entry.getKey();
+            String filterVal = entry.getValue();
+            if (filterKey == null || filterKey.isBlank() || filterVal == null || filterVal.isBlank()) continue;
+
+            boolean matched = false;
+            for (java.util.Map.Entry<String, String> attr : attrs.entrySet()) {
+                if (keysMatch(attr.getKey(), filterKey)) {
+                    if (attr.getValue() != null &&
+                            (attr.getValue().equalsIgnoreCase(filterVal.trim()) ||
+                             attr.getValue().toLowerCase().contains(filterVal.trim().toLowerCase()))) {
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!matched) return false;
+        }
+        return true;
+    }
+
+    private boolean keysMatch(String k1, String k2) {
+        if (k1 == null || k2 == null) return false;
+        String clean1 = k1.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        String clean2 = k2.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        return clean1.equals(clean2);
     }
 
     public ProductResponse get(Long id) {
@@ -313,6 +386,10 @@ public class ProductService {
             }
         } else {
             p.setSubcategory(null);
+        }
+
+        if (r.attributes() != null) {
+            p.setAttributes(r.attributes());
         }
     }
 

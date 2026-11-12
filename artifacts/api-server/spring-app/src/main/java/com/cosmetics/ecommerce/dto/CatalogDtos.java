@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public final class CatalogDtos {
     private CatalogDtos() {}
@@ -69,7 +70,8 @@ public final class CatalogDtos {
             String shade,
             String size,
             Instant expiryDate,
-            Long subcategoryId
+            Long subcategoryId,
+            Map<String, String> attributes
     ) {
         public ProductRequest(
                 String name, String sku, BigDecimal price, BigDecimal discountPrice,
@@ -81,7 +83,7 @@ public final class CatalogDtos {
             this(name, sku, price, discountPrice, stockQuantity, lowStockThreshold, categoryId,
                     description, shortDescription, imageUrl,
                     imageUrl != null ? List.of(imageUrl) : Collections.emptyList(),
-                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate, null);
+                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate, null, Collections.emptyMap());
         }
 
         public ProductRequest(
@@ -93,7 +95,20 @@ public final class CatalogDtos {
         ) {
             this(name, sku, price, discountPrice, stockQuantity, lowStockThreshold, categoryId,
                     description, shortDescription, imageUrl, images,
-                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate, null);
+                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate, null, Collections.emptyMap());
+        }
+
+        public ProductRequest(
+                String name, String sku, BigDecimal price, BigDecimal discountPrice,
+                int stockQuantity, int lowStockThreshold, Long categoryId,
+                String description, String shortDescription, String imageUrl,
+                List<String> images, Boolean active, Boolean featured, String ingredients, String benefits,
+                String howToUse, String skinType, String shade, String size, Instant expiryDate,
+                Long subcategoryId
+        ) {
+            this(name, sku, price, discountPrice, stockQuantity, lowStockThreshold, categoryId,
+                    description, shortDescription, imageUrl, images,
+                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate, subcategoryId, Collections.emptyMap());
         }
     }
 
@@ -128,7 +143,8 @@ public final class CatalogDtos {
             String relationshipType,
             List<ProductResponse> similarProducts,
             Long subcategoryId,
-            String subcategoryName
+            String subcategoryName,
+            Map<String, String> attributes
     ) {
         public ProductResponse(
                 Long id, String name, String slug, String sku, String description, String shortDescription,
@@ -139,7 +155,7 @@ public final class CatalogDtos {
         ) {
             this(id, name, slug, sku, description, shortDescription, price, discountPrice, sellingPrice, stockQuantity,
                     lowStockThreshold, categoryId, categoryName, imageUrl, images, active, featured, ingredients, benefits,
-                    howToUse, skinType, shade, size, expiryDate, averageRating, 1L, "MALKAZ", null, Collections.emptyList(), null, null);
+                    howToUse, skinType, shade, size, expiryDate, averageRating, 1L, "MALKAZ", null, Collections.emptyList(), null, null, Collections.emptyMap());
         }
 
         public ProductResponse(
@@ -152,7 +168,21 @@ public final class CatalogDtos {
         ) {
             this(id, name, slug, sku, description, shortDescription, price, discountPrice, sellingPrice, stockQuantity,
                     lowStockThreshold, categoryId, categoryName, imageUrl, images, active, featured, ingredients, benefits,
-                    howToUse, skinType, shade, size, expiryDate, averageRating, brandId, brandName, relationshipType, similarProducts, null, null);
+                    howToUse, skinType, shade, size, expiryDate, averageRating, brandId, brandName, relationshipType, similarProducts, null, null, Collections.emptyMap());
+        }
+
+        public ProductResponse(
+                Long id, String name, String slug, String sku, String description, String shortDescription,
+                BigDecimal price, BigDecimal discountPrice, BigDecimal sellingPrice, int stockQuantity,
+                int lowStockThreshold, Long categoryId, String categoryName,
+                String imageUrl, List<String> images, boolean active, boolean featured, String ingredients, String benefits,
+                String howToUse, String skinType, String shade, String size, Instant expiryDate, double averageRating,
+                Long brandId, String brandName, String relationshipType, List<ProductResponse> similarProducts,
+                Long subcategoryId, String subcategoryName
+        ) {
+            this(id, name, slug, sku, description, shortDescription, price, discountPrice, sellingPrice, stockQuantity,
+                    lowStockThreshold, categoryId, categoryName, imageUrl, images, active, featured, ingredients, benefits,
+                    howToUse, skinType, shade, size, expiryDate, averageRating, brandId, brandName, relationshipType, similarProducts, subcategoryId, subcategoryName, Collections.emptyMap());
         }
 
         public static ProductResponse from(Product p, double rating) {
@@ -195,7 +225,8 @@ public final class CatalogDtos {
                     null,
                     similar != null ? similar : Collections.emptyList(),
                     p.getSubcategory() != null ? p.getSubcategory().getId() : null,
-                    p.getSubcategory() != null ? p.getSubcategory().getName() : null
+                    p.getSubcategory() != null ? p.getSubcategory().getName() : null,
+                    p.getAttributes() != null ? p.getAttributes() : Collections.emptyMap()
             );
         }
     }

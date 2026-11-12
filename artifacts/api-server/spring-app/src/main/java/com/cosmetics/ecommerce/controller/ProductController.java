@@ -64,9 +64,34 @@ public class ProductController {
             @RequestParam(required = false) Boolean featured,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String occasion,
+            @RequestParam(required = false) String material,
+            @RequestParam(required = false) String plating,
+            @RequestParam(required = false) String stoneType,
+            @RequestParam(required = false) String color,
+            @RequestParam(required = false) java.util.Map<String, String> allParams,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
+        java.util.Map<String, String> attributeFilters = new java.util.LinkedHashMap<>();
+        if (allParams != null) {
+            java.util.Set<String> nonAttr = java.util.Set.of(
+                    "query", "categoryid", "subcategoryid", "featured", "minprice", "maxprice",
+                    "page", "size", "sort"
+            );
+            allParams.forEach((k, v) -> {
+                if (k != null && v != null && !v.isBlank() && !nonAttr.contains(k.toLowerCase())) {
+                    attributeFilters.put(k, v.trim());
+                }
+            });
+        }
+        if (occasion != null && !occasion.isBlank()) attributeFilters.put("occasion", occasion.trim());
+        if (material != null && !material.isBlank()) attributeFilters.put("material", material.trim());
+        if (plating != null && !plating.isBlank()) attributeFilters.put("plating", plating.trim());
+        if (stoneType != null && !stoneType.isBlank()) attributeFilters.put("stoneType", stoneType.trim());
+        if (color != null && !color.isBlank()) attributeFilters.put("color", color.trim());
+
         return ApiResponse.ok("Products fetched successfully.",
-                products.list(query, categoryId, subcategoryId, featured, minPrice, maxPrice, pageable));
+                products.list(query, categoryId, subcategoryId, featured, minPrice, maxPrice, attributeFilters, pageable));
     }
 
     @GetMapping("/{id}")
@@ -384,7 +409,8 @@ public class ProductController {
                         images != null && !images.isEmpty() ? images : p.images(),
                         p.active(), p.featured(), p.ingredients(), p.benefits(),
                         p.howToUse(), p.skinType(), p.shade(), p.size(), p.expiryDate(),
-                        p.subcategoryId() != null ? p.subcategoryId() : subcategoryId
+                        p.subcategoryId() != null ? p.subcategoryId() : subcategoryId,
+                        p.attributes() != null ? p.attributes() : java.util.Collections.emptyMap()
                 );
             } catch (Exception e) {
                 throw new BadRequestException("Invalid product JSON part: " + e.getMessage());
@@ -399,7 +425,8 @@ public class ProductController {
                 imageUrl, images, active != null ? active : true,
                 Boolean.TRUE.equals(featured),
                 ingredients, benefits, howToUse, skinType, shade, size, expiryDate,
-                subcategoryId
+                subcategoryId,
+                java.util.Collections.emptyMap()
         );
     }
 
