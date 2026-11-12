@@ -71,6 +71,8 @@ public class SecurityConfig {
                                 "/subcategories", "/subcategories/**",
                                 "/combos", "/combos/**",
                                 "/coupons", "/coupons/**",
+                                "/banners", "/banners/**",
+                                "/api/banners", "/api/banners/**",
                                 "/uploads/**"
                         ).permitAll()
 
