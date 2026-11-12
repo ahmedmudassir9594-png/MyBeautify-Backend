@@ -54,7 +54,7 @@ public class CatalogService {
     public PageResponse<CategoryResponse> categories(Pageable pageable) {
         Page<Category> page = categories.findByActiveTrueOrderByNameAsc(pageable);
         Map<Long, List<SubcategoryResponse>> subcategoryMap = getActiveSubcategoryMap();
-        Map<Long, Long> countMap = getSubcategoryCountMap(true);
+        Map<Long, Long> countMap = getSubcategoryCountMap(false);
 
         return PageResponse.from(page.map(c -> {
             long count = countMap.getOrDefault(c.getId(), 0L);
@@ -67,7 +67,7 @@ public class CatalogService {
         // Sirf active categories fetch karega:
         List<Category> allCategories = categories.findByActiveTrueOrderByNameAsc();
         Map<Long, List<SubcategoryResponse>> subcategoryMap = getActiveSubcategoryMap();
-        Map<Long, Long> countMap = getSubcategoryCountMap(true);
+        Map<Long, Long> countMap = getSubcategoryCountMap(false);
 
         return allCategories.stream().map(c -> {
             long count = countMap.getOrDefault(c.getId(), 0L);

@@ -68,7 +68,8 @@ public final class CatalogDtos {
             String skinType,
             String shade,
             String size,
-            Instant expiryDate
+            Instant expiryDate,
+            Long subcategoryId
     ) {
         public ProductRequest(
                 String name, String sku, BigDecimal price, BigDecimal discountPrice,
@@ -80,7 +81,19 @@ public final class CatalogDtos {
             this(name, sku, price, discountPrice, stockQuantity, lowStockThreshold, categoryId,
                     description, shortDescription, imageUrl,
                     imageUrl != null ? List.of(imageUrl) : Collections.emptyList(),
-                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate);
+                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate, null);
+        }
+
+        public ProductRequest(
+                String name, String sku, BigDecimal price, BigDecimal discountPrice,
+                int stockQuantity, int lowStockThreshold, Long categoryId,
+                String description, String shortDescription, String imageUrl,
+                List<String> images, Boolean active, Boolean featured, String ingredients, String benefits,
+                String howToUse, String skinType, String shade, String size, Instant expiryDate
+        ) {
+            this(name, sku, price, discountPrice, stockQuantity, lowStockThreshold, categoryId,
+                    description, shortDescription, imageUrl, images,
+                    active, featured, ingredients, benefits, howToUse, skinType, shade, size, expiryDate, null);
         }
     }
 
@@ -113,7 +126,9 @@ public final class CatalogDtos {
             Long brandId,
             String brandName,
             String relationshipType,
-            List<ProductResponse> similarProducts
+            List<ProductResponse> similarProducts,
+            Long subcategoryId,
+            String subcategoryName
     ) {
         public ProductResponse(
                 Long id, String name, String slug, String sku, String description, String shortDescription,
@@ -124,7 +139,20 @@ public final class CatalogDtos {
         ) {
             this(id, name, slug, sku, description, shortDescription, price, discountPrice, sellingPrice, stockQuantity,
                     lowStockThreshold, categoryId, categoryName, imageUrl, images, active, featured, ingredients, benefits,
-                    howToUse, skinType, shade, size, expiryDate, averageRating, 1L, "MALKAZ", null, Collections.emptyList());
+                    howToUse, skinType, shade, size, expiryDate, averageRating, 1L, "MALKAZ", null, Collections.emptyList(), null, null);
+        }
+
+        public ProductResponse(
+                Long id, String name, String slug, String sku, String description, String shortDescription,
+                BigDecimal price, BigDecimal discountPrice, BigDecimal sellingPrice, int stockQuantity,
+                int lowStockThreshold, Long categoryId, String categoryName,
+                String imageUrl, List<String> images, boolean active, boolean featured, String ingredients, String benefits,
+                String howToUse, String skinType, String shade, String size, Instant expiryDate, double averageRating,
+                Long brandId, String brandName, String relationshipType, List<ProductResponse> similarProducts
+        ) {
+            this(id, name, slug, sku, description, shortDescription, price, discountPrice, sellingPrice, stockQuantity,
+                    lowStockThreshold, categoryId, categoryName, imageUrl, images, active, featured, ingredients, benefits,
+                    howToUse, skinType, shade, size, expiryDate, averageRating, brandId, brandName, relationshipType, similarProducts, null, null);
         }
 
         public static ProductResponse from(Product p, double rating) {
@@ -165,7 +193,9 @@ public final class CatalogDtos {
                     1L,
                     "MALKAZ",
                     null,
-                    similar != null ? similar : Collections.emptyList()
+                    similar != null ? similar : Collections.emptyList(),
+                    p.getSubcategory() != null ? p.getSubcategory().getId() : null,
+                    p.getSubcategory() != null ? p.getSubcategory().getName() : null
             );
         }
     }

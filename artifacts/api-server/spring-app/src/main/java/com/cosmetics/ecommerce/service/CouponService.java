@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -58,6 +59,9 @@ public class CouponService {
         }
 
         throw new InvalidCouponException("Coupon or referral code is invalid.");
+    }
+    public List<CouponResponse> getActiveCoupons() {
+        return coupons.findActiveAndValidCoupons(Instant.now()).stream().map(CouponResponse::from).toList();
     }
     public PageResponse<CouponResponse> list(Pageable pageable) { return PageResponse.from(coupons.findAll(pageable).map(CouponResponse::from)); }
     @Transactional public CouponResponse create(CouponRequest r) {

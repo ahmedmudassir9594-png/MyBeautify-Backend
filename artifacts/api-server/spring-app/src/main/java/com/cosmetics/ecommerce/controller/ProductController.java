@@ -183,6 +183,7 @@ public class ProductController {
             @RequestParam(value = "stockQuantity", required = false) Integer stockQuantity,
             @RequestParam(value = "lowStockThreshold", required = false) Integer lowStockThreshold,
             @RequestParam(value = "categoryId", required = false) Long categoryId,
+            @RequestParam(value = "subcategoryId", required = false) Long subcategoryId,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "shortDescription", required = false) String shortDescription,
             @RequestParam(value = "imageUrl", required = false) String imageUrl,
@@ -226,7 +227,7 @@ public class ProductController {
         }
 
         ProductRequest request = buildProductRequest(productJson, name, sku, price, discountPrice,
-                stockQuantity, lowStockThreshold, categoryId, description, shortDescription,
+                stockQuantity, lowStockThreshold, categoryId, subcategoryId, description, shortDescription,
                 finalImageUrl, uploadedUrls, active, featured, ingredients, benefits, howToUse,
                 skinType, shade, size, expiryDate);
 
@@ -252,6 +253,7 @@ public class ProductController {
             @RequestParam(value = "stockQuantity", required = false) Integer stockQuantity,
             @RequestParam(value = "lowStockThreshold", required = false) Integer lowStockThreshold,
             @RequestParam(value = "categoryId", required = false) Long categoryId,
+            @RequestParam(value = "subcategoryId", required = false) Long subcategoryId,
             @RequestParam(value = "description", required = false) String description,
             @RequestParam(value = "shortDescription", required = false) String shortDescription,
             @RequestParam(value = "imageUrl", required = false) String imageUrl,
@@ -295,7 +297,7 @@ public class ProductController {
         }
 
         ProductRequest request = buildProductRequest(productJson, name, sku, price, discountPrice,
-                stockQuantity, lowStockThreshold, categoryId, description, shortDescription,
+                stockQuantity, lowStockThreshold, categoryId, subcategoryId, description, shortDescription,
                 finalImageUrl, uploadedUrls, active, featured, ingredients, benefits, howToUse,
                 skinType, shade, size, expiryDate);
 
@@ -366,7 +368,7 @@ public class ProductController {
 
     private ProductRequest buildProductRequest(
             String productJson, String name, String sku, BigDecimal price, BigDecimal discountPrice,
-            Integer stockQuantity, Integer lowStockThreshold, Long categoryId,
+            Integer stockQuantity, Integer lowStockThreshold, Long categoryId, Long subcategoryId,
             String description, String shortDescription, String imageUrl, List<String> images,
             Boolean active, Boolean featured, String ingredients, String benefits,
             String howToUse, String skinType, String shade, String size, Instant expiryDate) {
@@ -381,7 +383,8 @@ public class ProductController {
                         imageUrl != null ? imageUrl : p.imageUrl(),
                         images != null && !images.isEmpty() ? images : p.images(),
                         p.active(), p.featured(), p.ingredients(), p.benefits(),
-                        p.howToUse(), p.skinType(), p.shade(), p.size(), p.expiryDate()
+                        p.howToUse(), p.skinType(), p.shade(), p.size(), p.expiryDate(),
+                        p.subcategoryId() != null ? p.subcategoryId() : subcategoryId
                 );
             } catch (Exception e) {
                 throw new BadRequestException("Invalid product JSON part: " + e.getMessage());
@@ -395,7 +398,8 @@ public class ProductController {
                 categoryId, description, shortDescription,
                 imageUrl, images, active != null ? active : true,
                 Boolean.TRUE.equals(featured),
-                ingredients, benefits, howToUse, skinType, shade, size, expiryDate
+                ingredients, benefits, howToUse, skinType, shade, size, expiryDate,
+                subcategoryId
         );
     }
 

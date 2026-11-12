@@ -24,28 +24,38 @@ public class ProductService {
     private final AuditLogService auditLogService;
     private final FileStorageService fileStorageService;
     private final SimilarProductService similarProductService;
+    private final SubcategoryRepository subcategories;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ProductService(ProductRepository products, CategoryRepository categories,
                           AuditLogService auditLogService,
                           FileStorageService fileStorageService,
-                          @Autowired(required = false) SimilarProductService similarProductService) {
+                          @Autowired(required = false) SimilarProductService similarProductService,
+                          @Autowired(required = false) SubcategoryRepository subcategories) {
         this.products = products;
         this.categories = categories;
         this.auditLogService = auditLogService;
         this.fileStorageService = fileStorageService;
         this.similarProductService = similarProductService;
+        this.subcategories = subcategories;
+    }
+
+    public ProductService(ProductRepository products, CategoryRepository categories,
+                          AuditLogService auditLogService,
+                          FileStorageService fileStorageService,
+                          SimilarProductService similarProductService) {
+        this(products, categories, auditLogService, fileStorageService, similarProductService, null);
     }
 
     public ProductService(ProductRepository products, CategoryRepository categories,
                           AuditLogService auditLogService,
                           FileStorageService fileStorageService) {
-        this(products, categories, auditLogService, fileStorageService, null);
+        this(products, categories, auditLogService, fileStorageService, null, null);
     }
 
     public ProductService(ProductRepository products, CategoryRepository categories,
                           AuditLogService auditLogService) {
-        this(products, categories, auditLogService, null, null);
+        this(products, categories, auditLogService, null, null, null);
     }
 
     public PageResponse<ProductResponse> list(String query, Long categoryId, Boolean featured,
@@ -291,6 +301,19 @@ public class ProductService {
         p.setShade(r.shade());
         p.setSize(r.size());
         p.setExpiryDate(r.expiryDate());
+
+        if (r.subcategoryId() != null) {
+            if (subcategories != null) {
+                Subcategory sub = subcategories.findById(r.subcategoryId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Subcategory not found."));
+                if (p.getCategory() == null || !sub.getCategory().getId().equals(p.getCategory().getId())) {
+                    throw new BadRequestException("Subcategory does not belong to the selected category.");
+                }
+                p.setSubcategory(sub);
+            }
+        } else {
+            p.setSubcategory(null);
+        }
     }
 
     public ProductResponse response(Product p) {

@@ -49,4 +49,5 @@ public class Order {
     public void setCoupon(Coupon coupon) { this.coupon = coupon; }
     public void setPaymentStatus(PaymentStatus value) { paymentStatus = value; }
     public void setOrderStatus(OrderStatus value) { orderStatus = value; }
+    public void setPaymentMethod(PaymentMethod value) { paymentMethod = value; }
 }

@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/payments/razorpay")
 public class RazorpayWebhookController {
 
     private final RazorpayWebhookService webhookService;
@@ -16,7 +15,7 @@ public class RazorpayWebhookController {
         this.webhookService = webhookService;
     }
 
-    @PostMapping("/webhook")
+    @PostMapping({"/payments/razorpay/webhook", "/webhooks/razorpay", "/payments/webhook"})
     public ResponseEntity<Map<String, String>> handleWebhook(
             @RequestBody String rawPayload,
             @RequestHeader(value = "X-Razorpay-Signature", required = false) String signatureHeader) {

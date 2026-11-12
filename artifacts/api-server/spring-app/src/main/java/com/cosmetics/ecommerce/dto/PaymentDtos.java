@@ -101,6 +101,38 @@ public final class PaymentDtos {
             String message
     ) {}
 
+    public record RefundRecordResponse(
+            Long id,
+            Long paymentId,
+            String internalRefundRef,
+            String razorpayRefundId,
+            BigDecimal amount,
+            String currency,
+            com.cosmetics.ecommerce.enums.RefundStatus status,
+            String reason,
+            String initiatedBy,
+            Instant createdAt,
+            Instant processedAt,
+            String failureReason
+    ) {
+        public static RefundRecordResponse from(com.cosmetics.ecommerce.entity.Refund refund) {
+            return new RefundRecordResponse(
+                    refund.getId(),
+                    refund.getPayment().getId(),
+                    refund.getInternalRefundRef(),
+                    refund.getRazorpayRefundId(),
+                    refund.getAmount(),
+                    refund.getCurrency(),
+                    refund.getStatus(),
+                    refund.getReason(),
+                    refund.getInitiatedBy(),
+                    refund.getCreatedAt(),
+                    refund.getProcessedAt(),
+                    refund.getFailureReason()
+            );
+        }
+    }
+
     public record PaymentStatusResponse(
             Long paymentId,
             Long orderId,

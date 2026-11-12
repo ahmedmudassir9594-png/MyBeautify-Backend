@@ -13,6 +13,7 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,9 @@ public class RazorpayService {
     private final RazorpayProperties properties;
     private final ObjectProvider<RazorpayClient> razorpayClientProvider;
     private final PaymentRepository paymentRepository;
+
+    @Autowired(required = false)
+    private ObjectProvider<RefundService> refundServiceProvider;
 
     public RazorpayService(RazorpayProperties properties,
                            ObjectProvider<RazorpayClient> razorpayClientProvider,
@@ -81,6 +85,7 @@ public class RazorpayService {
 
     /**
      * Create dynamic UPI QR code
+     * STRICT PRODUCTION RULE: Never generate simulated UPI strings or fake third-party QR images.
      */
     public RazorpayQrResponse createDynamicQrCode(Order order, String razorpayOrderId) {
         long amountInPaise = order.getTotalAmount()
@@ -89,63 +94,52 @@ public class RazorpayService {
                 .longValue();
 
         RazorpayClient client = razorpayClientProvider.getIfAvailable();
-        if (client != null && properties.isConfigured() && !properties.getKeyId().startsWith("rzp_test_MALKAZTestKey")) {
-            try {
-                JSONObject qrReq = new JSONObject();
-                qrReq.put("type", "upi_qr");
-                qrReq.put("name", "MALKAZ Jewellery Order #" + order.getOrderNumber());
-                qrReq.put("usage", "single_use");
-                qrReq.put("fixed_amount", true);
-                qrReq.put("payment_amount", amountInPaise);
-                qrReq.put("description", "Payment for MALKAZ Order " + order.getOrderNumber());
-
-                JSONObject notes = new JSONObject();
-                notes.put("order_id", String.valueOf(order.getId()));
-                notes.put("order_number", order.getOrderNumber());
-                qrReq.put("notes", notes);
-
-                com.razorpay.QrCode qrCode = client.qrCode.create(qrReq);
-                String qrId = qrCode.get("id");
-                String imageUrl = qrCode.has("image_url") ? (String) qrCode.get("image_url") : null;
-                String paymentUrl = qrCode.has("payment_url") ? (String) qrCode.get("payment_url") : null;
-                String status = qrCode.has("status") ? (String) qrCode.get("status") : "active";
-
-                return new RazorpayQrResponse(
-                        order.getId(),
-                        order.getOrderNumber(),
-                        razorpayOrderId,
-                        qrId,
-                        imageUrl,
-                        paymentUrl,
-                        order.getTotalAmount(),
-                        amountInPaise,
-                        properties.getCurrency(),
-                        status
-                );
-            } catch (Exception e) {
-                log.warn("Dynamic QR creation via SDK failed, falling back to simulated QR: {}", e.getMessage());
-            }
+        if (client == null || !properties.isConfigured() || properties.getKeyId().startsWith("rzp_test_MALKAZTestKey")) {
+            throw new BadRequestException("Dynamic UPI QR generation is not supported or configured on this environment. Please use standard UPI checkout.");
         }
 
-        // Fallback simulated QR payload
-        String testQrId = "qr_test_" + UUID.randomUUID().toString().replace("-", "").substring(0, 14);
-        String upiLink = "upi://pay?pa=malkaz.payments@icici&pn=MALKAZ%20Jewellery&am="
-                + order.getTotalAmount() + "&cu=INR&tn=Order%20" + order.getOrderNumber();
-        String qrImageUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data="
-                + java.net.URLEncoder.encode(upiLink, java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            JSONObject qrReq = new JSONObject();
+            qrReq.put("type", "upi_qr");
+            qrReq.put("name", "MALKAZ Jewellery Order #" + order.getOrderNumber());
+            qrReq.put("usage", "single_use");
+            qrReq.put("fixed_amount", true);
+            qrReq.put("payment_amount", amountInPaise);
+            qrReq.put("description", "Payment for MALKAZ Order " + order.getOrderNumber());
 
-        return new RazorpayQrResponse(
-                order.getId(),
-                order.getOrderNumber(),
-                razorpayOrderId,
-                testQrId,
-                qrImageUrl,
-                upiLink,
-                order.getTotalAmount(),
-                amountInPaise,
-                properties.getCurrency(),
-                "active"
-        );
+            JSONObject notes = new JSONObject();
+            notes.put("order_id", String.valueOf(order.getId()));
+            notes.put("order_number", order.getOrderNumber());
+            qrReq.put("notes", notes);
+
+            com.razorpay.QrCode qrCode = client.qrCode.create(qrReq);
+            String qrId = qrCode.get("id");
+            String imageUrl = qrCode.has("image_url") ? (String) qrCode.get("image_url") : null;
+            String paymentUrl = qrCode.has("payment_url") ? (String) qrCode.get("payment_url") : null;
+            String status = qrCode.has("status") ? (String) qrCode.get("status") : "active";
+
+            if (qrId == null || qrId.isBlank()) {
+                throw new BadRequestException("Razorpay did not return a valid QR code ID.");
+            }
+
+            return new RazorpayQrResponse(
+                    order.getId(),
+                    order.getOrderNumber(),
+                    razorpayOrderId,
+                    qrId,
+                    imageUrl,
+                    paymentUrl,
+                    order.getTotalAmount(),
+                    amountInPaise,
+                    properties.getCurrency(),
+                    status
+            );
+        } catch (BadRequestException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to generate dynamic UPI QR code via Razorpay SDK: {}", e.getMessage(), e);
+            throw new BadRequestException("Dynamic UPI QR generation failed: " + e.getMessage());
+        }
     }
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
@@ -193,7 +187,7 @@ public class RazorpayService {
 
                 // Verify Amount
                 long expectedPaise = payment.getAmount()
-                        .multiply(BigDecimal.valueOf(100))
+                .multiply(BigDecimal.valueOf(100))
                         .setScale(0, RoundingMode.HALF_UP)
                         .longValue();
                 Number amtObj = rzpPayment.get("amount");
@@ -225,74 +219,16 @@ public class RazorpayService {
     }
 
     /**
-     * Process full or partial refund
+     * Process full or partial refund.
+     * Delegates to RefundService for database locking, ledger persistence, and multi-refund idempotency.
      */
-    @Transactional
     public RefundResponse processRefund(Payment payment, BigDecimal requestedRefundAmount, String reason) {
-        if (payment.getPaymentStatus() != PaymentStatus.SUCCESS && payment.getPaymentStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
-            throw new BadRequestException("Cannot refund payment: Current payment status is " + payment.getPaymentStatus() + ". Only successful or partially refunded payments can be refunded.");
-        }
-
-        BigDecimal currentRefunded = payment.getRefundAmount() != null ? payment.getRefundAmount() : BigDecimal.ZERO;
-        BigDecimal availableToRefund = payment.getAmount().subtract(currentRefunded);
-
-        if (availableToRefund.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BadRequestException("Payment has already been fully refunded.");
-        }
-
-        BigDecimal refundAmount = requestedRefundAmount != null ? requestedRefundAmount : availableToRefund;
-        if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BadRequestException("Refund amount must be greater than zero.");
-        }
-        if (refundAmount.compareTo(availableToRefund) > 0) {
-            throw new BadRequestException("Refund amount (" + refundAmount + ") exceeds remaining refundable amount (" + availableToRefund + ").");
-        }
-
-        long refundPaise = refundAmount
-                .multiply(BigDecimal.valueOf(100))
-                .setScale(0, RoundingMode.HALF_UP)
-                .longValue();
-
-        String refundId = "rfnd_test_" + UUID.randomUUID().toString().replace("-", "").substring(0, 14);
-        String refundStatus = "processed";
-
-        RazorpayClient client = razorpayClientProvider.getIfAvailable();
-        if (client != null && properties.isConfigured() && !properties.getKeyId().startsWith("rzp_test_MALKAZTestKey") && payment.getRazorpayPaymentId() != null) {
-            try {
-                JSONObject refundReq = new JSONObject();
-                refundReq.put("amount", refundPaise);
-                if (reason != null && !reason.isBlank()) {
-                    refundReq.put("notes", new JSONObject().put("reason", reason));
-                }
-                com.razorpay.Refund rzpRefund = client.payments.refund(payment.getRazorpayPaymentId(), refundReq);
-                refundId = rzpRefund.get("id");
-                refundStatus = rzpRefund.has("status") ? (String) rzpRefund.get("status") : "processed";
-            } catch (Exception e) {
-                log.error("Razorpay refund failed: {}", e.getMessage(), e);
-                throw new BadRequestException("Razorpay refund failed: " + e.getMessage());
+        if (refundServiceProvider != null) {
+            RefundService refundService = refundServiceProvider.getIfAvailable();
+            if (refundService != null && payment != null && payment.getId() != null) {
+                return refundService.processRefund(payment.getId(), requestedRefundAmount, reason, "ADMIN");
             }
         }
-
-        BigDecimal newTotalRefunded = currentRefunded.add(refundAmount);
-        payment.setRefundId(refundId);
-        payment.setRefundStatus(refundStatus);
-        payment.setRefundAmount(newTotalRefunded);
-
-        boolean fullyRefunded = newTotalRefunded.compareTo(payment.getAmount()) >= 0;
-        PaymentStatus newStatus = fullyRefunded ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;
-        payment.setPaymentStatus(newStatus);
-        paymentRepository.save(payment);
-
-        Order order = payment.getOrder();
-        return new RefundResponse(
-                refundId,
-                payment.getId(),
-                order != null ? order.getId() : null,
-                order != null ? order.getOrderNumber() : null,
-                refundAmount,
-                refundStatus,
-                newStatus,
-                fullyRefunded ? "Payment fully refunded successfully." : "Partial refund processed successfully."
-        );
+        throw new IllegalStateException("RefundService is not configured.");
     }
 }

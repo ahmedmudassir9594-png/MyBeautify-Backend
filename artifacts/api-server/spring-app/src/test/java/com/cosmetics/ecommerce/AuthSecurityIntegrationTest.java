@@ -6,28 +6,35 @@ import com.cosmetics.ecommerce.dto.ProfileDtos.ResetPasswordRequest;
 import com.cosmetics.ecommerce.entity.PasswordResetToken;
 import com.cosmetics.ecommerce.entity.User;
 import com.cosmetics.ecommerce.enums.Role;
+import com.cosmetics.ecommerce.entity.RefreshToken;
 import com.cosmetics.ecommerce.repository.PasswordResetTokenRepository;
+import com.cosmetics.ecommerce.repository.RefreshTokenRepository;
 import com.cosmetics.ecommerce.repository.UserRepository;
 import com.cosmetics.ecommerce.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -41,6 +48,9 @@ class AuthSecurityIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
     private PasswordResetTokenRepository resetTokenRepository;
@@ -57,6 +67,7 @@ class AuthSecurityIntegrationTest {
     @BeforeEach
     void setUp() {
         resetTokenRepository.deleteAll();
+        refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -182,5 +193,141 @@ class AuthSecurityIntegrationTest {
 
         // Ensure token was deleted so it cannot be re-used
         assertThat(resetTokenRepository.findByToken(token)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Login sets HttpOnly Secure refresh_token cookie and persists token in database")
+    void loginSetsHttpOnlySecureRefreshCookieAndPersistsToken() throws Exception {
+        User user = new User("Jane", "Doe", "jane@example.com", passwordEncoder.encode("Password123"), Role.CUSTOMER);
+        userRepository.save(user);
+
+        LoginRequest request = new LoginRequest("jane@example.com", "Password123");
+
+        MvcResult result = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").isString())
+                .andExpect(jsonPath("$.data.refreshToken").isString())
+                .andExpect(header().exists(HttpHeaders.SET_COOKIE))
+                .andReturn();
+
+        String setCookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        assertThat(setCookie).isNotNull();
+        assertThat(setCookie).contains("refresh_token=");
+        assertThat(setCookie).contains("HttpOnly");
+        assertThat(setCookie).contains("Path=/api/auth/refresh");
+        assertThat(setCookie).contains("SameSite=Strict");
+
+        List<RefreshToken> tokens = refreshTokenRepository.findByUserAndRevokedFalse(user);
+        assertThat(tokens).hasSize(1);
+        assertThat(tokens.get(0).isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Refresh endpoint with HttpOnly cookie rotates tokens and revokes old token")
+    void refreshUsingCookieRotatesTokensAndUpdatesDatabase() throws Exception {
+        User user = new User("Refresh", "Tester", "refreshtest@example.com", passwordEncoder.encode("Password123"), Role.CUSTOMER);
+        userRepository.save(user);
+
+        LoginRequest loginRequest = new LoginRequest("refreshtest@example.com", "Password123");
+        MvcResult loginResult = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Cookie refreshCookie = loginResult.getResponse().getCookie("refresh_token");
+        assertThat(refreshCookie).isNotNull();
+        String initialToken = refreshCookie.getValue();
+
+        // Perform rotation via cookie
+        MvcResult refreshResult = mockMvc.perform(post("/auth/refresh")
+                        .cookie(refreshCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").isString())
+                .andExpect(jsonPath("$.data.refreshToken").isString())
+                .andReturn();
+
+        Cookie rotatedCookie = refreshResult.getResponse().getCookie("refresh_token");
+        assertThat(rotatedCookie).isNotNull();
+        String rotatedToken = rotatedCookie.getValue();
+        assertThat(rotatedToken).isNotEqualTo(initialToken);
+
+        // Old token must be revoked
+        RefreshToken oldEntity = refreshTokenRepository.findByToken(initialToken).orElseThrow();
+        assertThat(oldEntity.isRevoked()).isTrue();
+
+        // New token must be active
+        RefreshToken newEntity = refreshTokenRepository.findByToken(rotatedToken).orElseThrow();
+        assertThat(newEntity.isRevoked()).isFalse();
+        assertThat(newEntity.getUser().getId()).isEqualTo(user.getId());
+    }
+
+    @Test
+    @DisplayName("Replaying revoked refresh token triggers reuse detection and revokes all user sessions")
+    void replayingRevokedRefreshTokenTriggersReuseDetectionAndRevokesAllSessions() throws Exception {
+        User user = new User("Victim", "User", "victim@example.com", passwordEncoder.encode("Password123"), Role.CUSTOMER);
+        userRepository.save(user);
+
+        // First login -> token 1
+        MvcResult loginResult1 = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest("victim@example.com", "Password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+        Cookie tokenCookie1 = loginResult1.getResponse().getCookie("refresh_token");
+
+        // Rotate token 1 -> token 2 (token 1 is now revoked)
+        mockMvc.perform(post("/auth/refresh").cookie(tokenCookie1))
+                .andExpect(status().isOk());
+
+        // Also simulate another active session (e.g. tablet login -> token 3)
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest("victim@example.com", "Password123"))))
+                .andExpect(status().isOk());
+
+        // Currently, active tokens exist
+        assertThat(refreshTokenRepository.findByUserAndRevokedFalse(user)).isNotEmpty();
+
+        // Replay attack: Attacker attempts to use revoked tokenCookie1
+        mockMvc.perform(post("/auth/refresh").cookie(tokenCookie1))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Security alert: Refresh token reuse detected. All sessions terminated."));
+
+        // Reuse detection check: ALL active tokens for this user must now be revoked
+        List<RefreshToken> activeTokensAfterBreach = refreshTokenRepository.findByUserAndRevokedFalse(user);
+        assertThat(activeTokensAfterBreach).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Logout revokes refresh token and clears client cookie")
+    void logoutRevokesRefreshTokenAndClearsCookie() throws Exception {
+        User user = new User("Logout", "User", "logout@example.com", passwordEncoder.encode("Password123"), Role.CUSTOMER);
+        userRepository.save(user);
+
+        MvcResult loginResult = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest("logout@example.com", "Password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Cookie refreshCookie = loginResult.getResponse().getCookie("refresh_token");
+        assertThat(refreshCookie).isNotNull();
+
+        MvcResult logoutResult = mockMvc.perform(post("/auth/logout").cookie(refreshCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Logged out successfully."))
+                .andReturn();
+
+        String clearCookie = logoutResult.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        assertThat(clearCookie).isNotNull();
+        assertThat(clearCookie).contains("Max-Age=0");
+
+        RefreshToken storedToken = refreshTokenRepository.findByToken(refreshCookie.getValue()).orElseThrow();
+        assertThat(storedToken.isRevoked()).isTrue();
     }
 }

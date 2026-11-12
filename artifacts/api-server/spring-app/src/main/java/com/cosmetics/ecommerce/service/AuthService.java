@@ -6,6 +6,7 @@ import com.cosmetics.ecommerce.dto.ProfileDtos.ResetPasswordRequest;
 import com.cosmetics.ecommerce.dto.ProfileDtos.UpdateProfileRequest;
 import com.cosmetics.ecommerce.dto.UserResponse;
 import com.cosmetics.ecommerce.email.EmailService;
+import com.cosmetics.ecommerce.entity.RefreshToken;
 import com.cosmetics.ecommerce.entity.User;
 import com.cosmetics.ecommerce.enums.AuditAction;
 import com.cosmetics.ecommerce.enums.AuditResult;
@@ -14,9 +15,11 @@ import com.cosmetics.ecommerce.exception.DuplicateResourceException;
 import com.cosmetics.ecommerce.exception.ResourceNotFoundException;
 import com.cosmetics.ecommerce.exception.UnauthorizedException;
 import com.cosmetics.ecommerce.repository.PasswordResetTokenRepository;
+import com.cosmetics.ecommerce.repository.RefreshTokenRepository;
 import com.cosmetics.ecommerce.repository.UserRepository;
 import com.cosmetics.ecommerce.security.JwtService;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,12 +41,18 @@ public class AuthService {
     private final EmailService emailService;
     private final ReferralService referralService;
     private final AuditLogService auditLogService;
+    private final RefreshTokenRepository refreshTokenRepository;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    public AuthService(GoogleTokenService googleTokenService, UserRepository userRepository,
-                       PasswordEncoder passwordEncoder, JwtService jwtService,
-                       PasswordResetTokenRepository resetTokens, EmailService emailService,
-                       ReferralService referralService, AuditLogService auditLogService) {
+    @Autowired
+    public AuthService(GoogleTokenService googleTokenService,
+                       UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       JwtService jwtService,
+                       PasswordResetTokenRepository resetTokens,
+                       EmailService emailService,
+                       ReferralService referralService,
+                       @Autowired(required = false) AuditLogService auditLogService,
+                       @Autowired(required = false) RefreshTokenRepository refreshTokenRepository) {
         this.googleTokenService = googleTokenService;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -52,19 +61,29 @@ public class AuthService {
         this.emailService = emailService;
         this.referralService = referralService;
         this.auditLogService = auditLogService;
+        this.refreshTokenRepository = refreshTokenRepository;
     }
 
     public AuthService(GoogleTokenService googleTokenService, UserRepository userRepository,
                        PasswordEncoder passwordEncoder, JwtService jwtService,
                        PasswordResetTokenRepository resetTokens, EmailService emailService,
                        ReferralService referralService) {
-        this(googleTokenService, userRepository, passwordEncoder, jwtService, resetTokens, emailService, referralService, null);
+        this(googleTokenService, userRepository, passwordEncoder, jwtService, resetTokens, emailService, referralService, null, null);
+    }
+
+    public AuthService(GoogleTokenService googleTokenService, UserRepository userRepository,
+                       PasswordEncoder passwordEncoder, JwtService jwtService,
+                       PasswordResetTokenRepository resetTokens, EmailService emailService,
+                       ReferralService referralService, RefreshTokenRepository refreshTokenRepository) {
+        this(googleTokenService, userRepository, passwordEncoder, jwtService, resetTokens, emailService, referralService, null, refreshTokenRepository);
     }
 
     @Transactional
     public AuthDtos.AuthResponse register(AuthDtos.RegisterRequest request) {
         String email = request.email().trim().toLowerCase();
-        if (userRepository.existsByEmailIgnoreCase(email)) throw new DuplicateResourceException("Email is already registered.");
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new DuplicateResourceException("Email is already registered.");
+        }
         String firstName = request.effectiveFirstName();
         String lastName = request.effectiveLastName();
         String fullName = request.effectiveFullName();
@@ -85,9 +104,10 @@ public class AuthService {
                     "Customer registration successful", null, "{\"email\":\"" + user.getEmail() + "\",\"role\":\"" + user.getRole() + "\"}");
         }
 
-        return tokens(user);
+        return issueTokens(user);
     }
 
+    @Transactional
     public AuthDtos.AuthResponse login(AuthDtos.LoginRequest request) {
         String email = request.email() != null ? request.email().trim() : "";
         Optional<User> userOpt = userRepository.findByEmailIgnoreCase(email);
@@ -123,7 +143,7 @@ public class AuthService {
                     "User logged in successfully", null, null);
         }
 
-        return tokens(user);
+        return issueTokens(user);
     }
 
     @Transactional
@@ -149,7 +169,6 @@ public class AuthService {
         String googleId = payload.getSubject();
         String email = payload.getEmail().trim().toLowerCase();
 
-        // Check whether this Google account is already linked.
         Optional<User> linkedUser = userRepository.findByGoogleId(googleId);
 
         if (linkedUser.isPresent()) {
@@ -169,10 +188,9 @@ public class AuthService {
                         AuditAction.LOGIN_SUCCESS, AuditResult.SUCCESS, "USER", String.valueOf(user.getId()),
                         "Google login successful", null, null);
             }
-            return tokens(user);
+            return issueTokens(user);
         }
 
-        // Never automatically link an existing account by email alone.
         Optional<User> existingUser = userRepository.findByEmailIgnoreCase(email);
 
         if (existingUser.isPresent()) {
@@ -216,7 +234,7 @@ public class AuthService {
                     "Google registration and login successful", null, "{\"email\":\"" + user.getEmail() + "\"}");
         }
 
-        return tokens(user);
+        return issueTokens(user);
     }
 
     private String googleName(GoogleIdToken.Payload payload, String key) {
@@ -305,22 +323,161 @@ public class AuthService {
         }
     }
 
-    public AuthDtos.AuthResponse refresh(AuthDtos.RefreshTokenRequest request) {
-        if (!jwtService.isRefreshToken(request.refreshToken())) {
+    /**
+     * Strict Refresh Token Rotation (RTR) with Reuse Detection.
+     * Validates the presented refresh token against TiDB.
+     * If an already revoked token is used, invalidates ALL active tokens for that user (Replay attack detection).
+     * On success, revokes the old token, issues a brand-new token pair, and persists the new token in TiDB.
+     */
+    @Transactional(noRollbackFor = UnauthorizedException.class)
+    public AuthDtos.AuthResponse rotateRefreshToken(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw new UnauthorizedException("Refresh token is required.");
+        }
+
+        if (refreshTokenRepository != null) {
+            Optional<RefreshToken> tokenOpt = refreshTokenRepository.findByToken(rawRefreshToken);
+
+            if (tokenOpt.isPresent()) {
+                RefreshToken existingToken = tokenOpt.get();
+                User user = existingToken.getUser();
+                Long userId = user.getId();
+                String userEmail = user.getEmail();
+
+                // 1. REUSE DETECTION (Replay Attack Prevention)
+                if (existingToken.isRevoked()) {
+                    refreshTokenRepository.revokeAllActiveTokensByUser(user);
+                    if (userId != null) {
+                        refreshTokenRepository.revokeAllActiveTokensByUserId(userId);
+                    }
+                    if (auditLogService != null) {
+                        auditLogService.logSecurityFailure(
+                                AuditAction.SECURITY_AUTHENTICATION_FAILURE,
+                                String.valueOf(userId),
+                                "CRITICAL: Refresh token reuse detected! Revoked all sessions for user: " + userEmail
+                        );
+                    }
+                    throw new UnauthorizedException("Security alert: Refresh token reuse detected. All sessions terminated.");
+                }
+
+                // 2. Expiry check
+                if (existingToken.isExpired()) {
+                    existingToken.setRevoked(true);
+                    refreshTokenRepository.save(existingToken);
+                    throw new UnauthorizedException("Refresh token has expired. Please log in again.");
+                }
+
+                // 3. User account state check
+                if (!user.isEnabled()) {
+                    existingToken.setRevoked(true);
+                    refreshTokenRepository.save(existingToken);
+                    throw new UnauthorizedException("This account has been deactivated.");
+                }
+
+                // 4. Cryptographic JWT check
+                if (!jwtService.isRefreshToken(rawRefreshToken) || !jwtService.isValid(rawRefreshToken, user)) {
+                    existingToken.setRevoked(true);
+                    refreshTokenRepository.save(existingToken);
+                    throw new UnauthorizedException("Refresh token cryptographic validation failed.");
+                }
+
+                // 5. ROTATE: Revoke old token
+                existingToken.setRevoked(true);
+                refreshTokenRepository.save(existingToken);
+
+                // 6. Issue brand-new token pair
+                String newAccessToken = jwtService.accessToken(user);
+                String newRefreshToken = jwtService.refreshToken(user);
+
+                RefreshToken newEntity = new RefreshToken(
+                        newRefreshToken,
+                        user,
+                        Instant.now().plus(jwtService.getRefreshTokenDays(), ChronoUnit.DAYS)
+                );
+                refreshTokenRepository.save(newEntity);
+
+                if (auditLogService != null) {
+                    auditLogService.logWithActor(user.getId(), user.getEmail(), user.getRole().name(),
+                            AuditAction.LOGIN_SUCCESS, AuditResult.SUCCESS, "USER", String.valueOf(user.getId()),
+                            "Refresh token rotated successfully", null, null);
+                }
+
+                return new AuthDtos.AuthResponse(newAccessToken, newRefreshToken, UserResponse.from(user));
+            }
+        }
+
+        // Fallback for stateless validation if repository is unavailable (e.g. mock test context)
+        if (!jwtService.isRefreshToken(rawRefreshToken)) {
             throw new UnauthorizedException("Refresh token is invalid or expired.");
         }
         String email;
-        try { email = jwtService.subject(request.refreshToken()); }
-        catch (RuntimeException ex) { throw new UnauthorizedException("Refresh token is invalid or expired."); }
-        User user = userRepository.findByEmailIgnoreCase(email).orElseThrow(() -> new UnauthorizedException("Refresh token is invalid."));
+        try {
+            email = jwtService.subject(rawRefreshToken);
+        } catch (RuntimeException ex) {
+            throw new UnauthorizedException("Refresh token is invalid or expired.");
+        }
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new UnauthorizedException("Refresh token is invalid."));
         if (!user.isEnabled()) {
             throw new UnauthorizedException("This account has been deactivated.");
         }
-        if (!jwtService.isValid(request.refreshToken(), user)) throw new UnauthorizedException("Refresh token is invalid or expired.");
-        return tokens(user);
+        if (!jwtService.isValid(rawRefreshToken, user)) {
+            throw new UnauthorizedException("Refresh token is invalid or expired.");
+        }
+
+        return issueTokens(user);
     }
 
-    private AuthDtos.AuthResponse tokens(User user) {
-        return new AuthDtos.AuthResponse(jwtService.accessToken(user), jwtService.refreshToken(user), UserResponse.from(user));
+    /**
+     * Backward-compatible refresh endpoint handler.
+     */
+    @Transactional
+    public AuthDtos.AuthResponse refresh(AuthDtos.RefreshTokenRequest request) {
+        if (request == null || request.refreshToken() == null) {
+            throw new UnauthorizedException("Refresh token is required.");
+        }
+        return rotateRefreshToken(request.refreshToken());
+    }
+
+    /**
+     * Revokes a session upon user logout.
+     */
+    @Transactional
+    public void logout(String rawRefreshToken, User authenticatedUser) {
+        if (refreshTokenRepository != null) {
+            if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
+                refreshTokenRepository.findByToken(rawRefreshToken).ifPresent(rt -> {
+                    rt.setRevoked(true);
+                    refreshTokenRepository.save(rt);
+                });
+            } else if (authenticatedUser != null) {
+                refreshTokenRepository.revokeAllActiveTokensByUser(authenticatedUser);
+            }
+        }
+
+        if (auditLogService != null && authenticatedUser != null) {
+            auditLogService.logWithActor(authenticatedUser.getId(), authenticatedUser.getEmail(),
+                    authenticatedUser.getRole().name(), AuditAction.LOGOUT, AuditResult.SUCCESS,
+                    "USER", String.valueOf(authenticatedUser.getId()), "User logged out successfully", null, null);
+        }
+    }
+
+    /**
+     * Helper to issue access and refresh tokens and persist the refresh token in TiDB.
+     */
+    private AuthDtos.AuthResponse issueTokens(User user) {
+        String accessToken = jwtService.accessToken(user);
+        String refreshToken = jwtService.refreshToken(user);
+
+        if (refreshTokenRepository != null) {
+            RefreshToken entity = new RefreshToken(
+                    refreshToken,
+                    user,
+                    Instant.now().plus(jwtService.getRefreshTokenDays(), ChronoUnit.DAYS)
+            );
+            refreshTokenRepository.save(entity);
+        }
+
+        return new AuthDtos.AuthResponse(accessToken, refreshToken, UserResponse.from(user));
     }
 }

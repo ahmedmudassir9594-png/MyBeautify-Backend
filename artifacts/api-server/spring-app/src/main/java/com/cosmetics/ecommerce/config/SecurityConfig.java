@@ -50,7 +50,7 @@ public class SecurityConfig {
 
                         // 2. Health & Webhooks
                         .requestMatchers("/healthz", "/actuator/health").permitAll()
-                        .requestMatchers("/payments/razorpay/webhook").permitAll()
+                        .requestMatchers("/payments/razorpay/webhook", "/webhooks/razorpay", "/payments/webhook", "/webhooks/**").permitAll()
                         .requestMatchers("/referrals/validate").permitAll()
 
                         // 3. Public Auth Routes
@@ -70,14 +70,15 @@ public class SecurityConfig {
                                 "/categoriesASC", "/categoriesASC/**",
                                 "/subcategories", "/subcategories/**",
                                 "/combos", "/combos/**",
+                                "/coupons", "/coupons/**",
                                 "/uploads/**"
                         ).permitAll()
 
-                        // 6. Public Combo Preview
-                        .requestMatchers(HttpMethod.POST, "/combos/custom/preview").permitAll()
+                        // 6. Public Combo Preview & Coupon Apply
+                        .requestMatchers(HttpMethod.POST, "/combos/custom/preview", "/coupons/apply").permitAll()
 
                         // 7. Role Protected Endpoints
-                        .requestMatchers("/admin/payments/*/refund").hasRole("ADMIN")
+                        .requestMatchers("/admin/payments/**").hasRole("ADMIN")
                         .requestMatchers("/admin/audit-logs/**").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasAnyRole("ADMIN", "STAFF")
 
@@ -133,8 +134,8 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).toList());
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"));
-        config.setExposedHeaders(Arrays.asList("Authorization"));
+        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Correlation-ID", "X-Forwarded-Proto"));
+        config.setExposedHeaders(Arrays.asList("Authorization", "Set-Cookie"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

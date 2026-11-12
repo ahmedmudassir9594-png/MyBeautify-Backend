@@ -66,22 +66,20 @@ CREATE TABLE IF NOT EXISTS combo_discount_rules (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Modify cart_items to support combo grouping
-ALTER TABLE cart_items
-    ADD COLUMN IF NOT EXISTS combo_id BIGINT NULL,
-    ADD COLUMN IF NOT EXISTS combo_group_id VARCHAR(64) NULL,
-    ADD COLUMN IF NOT EXISTS combo_type VARCHAR(32) NULL,
-    ADD COLUMN IF NOT EXISTS combo_name VARCHAR(180) NULL,
-    ADD COLUMN IF NOT EXISTS original_price DECIMAL(12, 2) NULL,
-    ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(12, 2) NULL;
+ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS combo_id BIGINT NULL;
+ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS combo_group_id VARCHAR(64) NULL;
+ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS combo_type VARCHAR(32) NULL;
+ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS combo_name VARCHAR(180) NULL;
+ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS original_price DECIMAL(12, 2) NULL;
+ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(12, 2) NULL;
 
 -- Modify order_items to support combo attribution
-ALTER TABLE order_items
-    ADD COLUMN IF NOT EXISTS combo_id BIGINT NULL,
-    ADD COLUMN IF NOT EXISTS combo_group_id VARCHAR(64) NULL,
-    ADD COLUMN IF NOT EXISTS combo_type VARCHAR(32) NULL,
-    ADD COLUMN IF NOT EXISTS combo_name VARCHAR(180) NULL,
-    ADD COLUMN IF NOT EXISTS original_price DECIMAL(12, 2) NULL,
-    ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(12, 2) NULL;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS combo_id BIGINT NULL;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS combo_group_id VARCHAR(64) NULL;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS combo_type VARCHAR(32) NULL;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS combo_name VARCHAR(180) NULL;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS original_price DECIMAL(12, 2) NULL;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(12, 2) NULL;
 
 -- Seed default discount rule if not present
 INSERT INTO combo_discount_rules (name, description, min_products, discount_type, discount_value, active)
@@ -142,17 +140,16 @@ ALTER TABLE products
 -- Entities: Payment (Upgraded), PaymentWebhookEvent
 -- ------------------------------------------------------------------------------
 
-ALTER TABLE payments
-    ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(100) NULL,
-    ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(100) NULL,
-    ADD COLUMN IF NOT EXISTS razorpay_signature VARCHAR(255) NULL,
-    ADD COLUMN IF NOT EXISTS currency VARCHAR(10) NOT NULL DEFAULT 'INR',
-    ADD COLUMN IF NOT EXISTS failure_code VARCHAR(100) NULL,
-    ADD COLUMN IF NOT EXISTS failure_reason TEXT NULL,
-    ADD COLUMN IF NOT EXISTS refund_id VARCHAR(100) NULL,
-    ADD COLUMN IF NOT EXISTS refund_status VARCHAR(50) NULL,
-    ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(12, 2) NULL,
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(100) NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(100) NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_signature VARCHAR(255) NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency VARCHAR(10) NOT NULL DEFAULT 'INR';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS failure_code VARCHAR(100) NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS failure_reason TEXT NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refund_id VARCHAR(100) NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refund_status VARCHAR(50) NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(12, 2) NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS payment_webhook_events (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

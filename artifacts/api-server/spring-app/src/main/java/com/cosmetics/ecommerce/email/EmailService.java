@@ -34,6 +34,10 @@ public class EmailService {
         send(email, "Order confirmation " + orderNumber, "Your order " + orderNumber + " was placed successfully. Total: " + total);
     }
 
+    public void sendAdminAlert(String subject, String body) {
+        send(from, subject, body);
+    }
+
     private void send(String recipient, String subject, String body) {
         if (!enabled) return;
         try {
